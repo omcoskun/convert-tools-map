@@ -216,6 +216,23 @@ Değişmeyen kurallar:
   14'ten itibaren, OpenFreeMap karolarındaki bina yüksekliklerinden),
   enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler) ve MGRS ızgara
   bölgeleri (bu ikisi varsayılan kapalı).
+- Askerî semboller (kontrol sütunundaki çerçeve düğmesi): APP-6A, APP-6B,
+  APP-6D, APP-6E, MIL-STD-2525C, 2525D ve 2525E standartlarında sembol
+  paleti. Katalogda ad ya da kodla aranır ve kategoriye göre süzülür; kimlik,
+  bağlam (gerçek/tatbikat/simülasyon), durum, kademe ya da hareket
+  kabiliyeti, karargâh / görev kuvveti / aldatma göstergeleri, sektör
+  niteleyicileri (sayısal standartlarda), 12 metin alanı ve boyut seçilir;
+  SIDC önizlemenin altında yazar. "Haritaya yerleştir" ile haritaya
+  tıklanan yere konur; sembol sürüklenerek taşınır, tıklanınca palette
+  düzenlenir (değişiklik hemen uygulanır), Delete ile ya da paletten
+  silinir. Semboller tarayıcıda hatırlanır (`localStorage`, en çok 500).
+  Çizim sahibinin milsymbol çatalıyla yapılır (`github:omcoskun/milsymbol`,
+  sabit commit, MIT); kütüphane ayrı bir parça olarak yalnız palet açılınca
+  ya da haritada sembol varken yüklenir (`src/map/milsymbol.js`). Kataloglar
+  `public/symbols/` altındadır ve çatalın `node scripts/build-studio.mjs
+  --data DİZİN` çıktısından `node scripts/symbol-catalog.mjs DİZİN` ile
+  üretilir; APP-6E kendi kataloğu olmadığı için 2525E'ninkini kullanır ve
+  SIDC'si 16 sürümüyle yazılır.
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
   sol üstte): yakınlaşırken görünür, sonra silinir; tıklayınca
   metrik, deniz mili ve imperial arasında döner; katman panelinden sabitlenebilir.

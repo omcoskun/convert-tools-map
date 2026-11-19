@@ -16,6 +16,7 @@
     "@mui/material": "5.18.0",
     "@omcoskun/convert-tools": "^1.0.0",
     "maplibre-gl": "6.18.0",
+    "milsymbol": "github:omcoskun/milsymbol#b2b24f88a47fd5527f74f6ac2c31e02e8c58129c",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },

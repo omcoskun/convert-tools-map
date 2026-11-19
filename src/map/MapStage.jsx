@@ -14,7 +14,9 @@ import { PIN_SHAPE } from "./map-adapter.js";
 import { SCALE_UNITS } from "./scale.js";
 import ScaleBar from "./ScaleBar.jsx";
 import SpaceBackdrop from "./SpaceBackdrop.jsx";
+import SymbolPalette from "./SymbolPalette.jsx";
 import useMapStage from "./useMapStage.js";
+import useSymbols from "./useSymbols.js";
 
 // Pin and picking colours. The ink pin takes the colour of the plain line on
 // the loaded basemap (--map-ink, set on the stage), so it matches its line on
@@ -159,6 +161,10 @@ const stageSx = {
       [`& .map-pin.tone-${tone}.is-hollow .map-pin-dot`, { bgcolor: "#ffffff", borderColor: color }],
     ]),
   ),
+  // Military symbols (useSymbols.js): milsymbol's SVG, dragged to move.
+  "& .map-symbol": { cursor: "grab", touchAction: "none", lineHeight: 0 },
+  "& .map-symbol:active": { cursor: "grabbing" },
+  "& .map-symbol:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: "2px", borderRadius: "4px" },
   "& .map-line-tag": {
     px: "9px",
     py: "3px",
@@ -315,6 +321,20 @@ export default function MapStage({
 
   const [layersOpen, setLayersOpen] = useState(false);
   const layersButtonRef = useRef(null);
+  const symbolsButtonRef = useRef(null);
+  const markerLabel = useCallback(
+    (symbol) => {
+      const name = [symbol.name || text.symbolUnnamed, symbol.texts?.uniqueDesignation].filter(Boolean).join(" ");
+      return text.symbolMarker.replace("{name}", name);
+    },
+    [text],
+  );
+  const symbols = useSymbols({ map, markerLabel });
+  const closeSymbols = useCallback(() => {
+    const focused = document.activeElement;
+    if (focused instanceof Element && focused.closest(".map-symbol-palette")) symbolsButtonRef.current?.focus();
+    symbols.closePalette();
+  }, [symbols.closePalette]);
   const [scaleUnit, setScaleUnit] = useState(() => readPref("map-scale-unit", "metric", SCALE_UNITS));
   const [scalePinned, setScalePinned] = useState(() => readPref("map-scale-pinned", false));
   const changeScaleUnit = useCallback((unit) => {
@@ -344,7 +364,7 @@ export default function MapStage({
   useEffect(() => {
     if (!active) return undefined;
     function onKey(event) {
-      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || map.contextMenu) return;
+      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || symbols.open || map.contextMenu) return;
       if (picking) {
         handlersRef.current?.onCancelPick?.();
         event.preventDefault();
@@ -355,7 +375,7 @@ export default function MapStage({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, map.contextMenu]);
+  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, symbols.open, map.contextMenu]);
 
   const tone = TONES[picking?.tone] ?? TONES.ink;
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
@@ -565,12 +585,28 @@ export default function MapStage({
             icon="layers"
             buttonRef={layersButtonRef}
             expanded={layersOpen}
-            onClick={() => setLayersOpen((open) => !open)}
+            onClick={() => {
+              if (symbols.open) symbols.closePalette();
+              setLayersOpen((open) => !open);
+            }}
             disabled={!ready}
           />
           <ControlButton label={text.map3D} onClick={() => setMode(viewMode === "3d" ? "2d" : "3d")} disabled={!ready} pressed={viewMode === "3d"}>
             <Box component="span" sx={{ fontSize: 12, fontWeight: 750, letterSpacing: "0.02em" }}>3D</Box>
           </ControlButton>
+        </Box>
+        <Box sx={groupSx}>
+          <ControlButton
+            label={text.mapSymbols}
+            icon="symbol"
+            buttonRef={symbolsButtonRef}
+            expanded={symbols.open}
+            onClick={() => {
+              setLayersOpen(false);
+              symbols.togglePalette();
+            }}
+            disabled={!ready}
+          />
         </Box>
         <Box sx={groupSx}>
           <ControlButton label={text.mapZoomIn} icon="plus" onClick={map.zoomIn} disabled={!ready || !map.canZoomIn} />
@@ -633,6 +669,7 @@ export default function MapStage({
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />
+        <SymbolPalette palette={symbols} open={symbols.open && ready} onClose={closeSymbols} />
       </Box>
 
       {/* The scale bar, as on Apple Maps: top centre of the window, or just

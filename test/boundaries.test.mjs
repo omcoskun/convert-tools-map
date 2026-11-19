@@ -3,6 +3,7 @@
 //   - the core is used through "@omcoskun/convert-tools" and nothing else;
 //   - the demo computes no geodesy of its own;
 //   - MapLibre is loaded on demand, by src/map/maplibre.js only;
+//   - milsymbol is loaded on demand, by src/map/milsymbol.js only;
 //   - the removed Next/Worker/Cesium/TypeScript stack stays removed.
 
 import assert from "node:assert/strict";
@@ -14,6 +15,7 @@ import { APP_ROOT, SRC, listFiles, sourceFiles } from "./support/files.mjs";
 
 const UI_MODULE = path.join("ui", "index.js");
 const MAPLIBRE_MODULE = path.join("map", "maplibre.js");
+const MILSYMBOL_MODULE = path.join("map", "milsymbol.js");
 
 /** Module specifiers of static imports, re-exports and dynamic imports. */
 function specifiers(text) {
@@ -45,6 +47,7 @@ test("packages come from an allow-list and the core only from its root entry", (
       if (specifier.startsWith(".")) continue;
       if (name === UI_MODULE && specifier === "@mui/material") continue;
       if (name === MAPLIBRE_MODULE && specifier === "maplibre-gl") continue;
+      if (name === MILSYMBOL_MODULE && specifier === "milsymbol") continue;
       if (!allowed.has(specifier)) offenders.push(`${name}: ${specifier}`);
     }
   }
@@ -57,6 +60,14 @@ test("maplibre-gl is imported only dynamically, by src/map/maplibre.js", () => {
   const loader = sources.find(({ name }) => name === MAPLIBRE_MODULE).text;
   assert.match(loader, /\bimport\("maplibre-gl"\)/, "a dynamic import, so the library is its own chunk");
   assert.doesNotMatch(loader, /^\s*import\s[^(]*["']maplibre-gl["']/m, "no static import");
+});
+
+test("milsymbol is imported only dynamically, by src/map/milsymbol.js", () => {
+  const importers = sources.filter(({ text }) => specifiers(text).includes("milsymbol")).map(({ name }) => name);
+  assert.deepEqual(importers, [MILSYMBOL_MODULE]);
+  const loader = sources.find(({ name }) => name === MILSYMBOL_MODULE).text;
+  assert.match(loader, /\bimport\("milsymbol"\)/, "a dynamic import, so the library is its own chunk");
+  assert.doesNotMatch(loader, /^\s*import\s[^(]*["']milsymbol["']/m, "no static import");
 });
 
 test("imagery comes only from the basemaps of config.json, never Esri/ArcGIS", () => {

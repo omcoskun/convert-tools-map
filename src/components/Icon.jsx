@@ -119,6 +119,13 @@ const PATHS = {
     </>
   ),
   locate: <path d="M20.5 3.5 3.5 10.6l7.2 2.7 2.7 7.2 7.1-17Z" />,
+  // A friendly land unit's frame with the infantry cross.
+  symbol: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="1" />
+      <path d="m3 6 18 12M21 6 3 18" />
+    </>
+  ),
 };
 
 /**

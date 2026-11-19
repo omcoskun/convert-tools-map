@@ -603,6 +603,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const compassNodeRef = useRef(null);
   const mapRef = useRef(null);
   const libraryRef = useRef(null);
+  // Set while another part of the map (the symbol palette) wants the next
+  // click: it gets the clicked point and nothing else happens.
+  const mapClickRef = useRef(null);
   const pinsRef = useRef(new Map());
   const tagsRef = useRef(new Map());
   const polarRef = useRef(null);
@@ -1293,8 +1296,14 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       });
 
       map.on("click", (event) => {
-        if (!latestRef.current?.scene.picking) return;
         const origin = event.originalEvent?.target;
+        if (mapClickRef.current) {
+          if (origin instanceof Element && origin.closest(".maplibregl-marker")) return;
+          const lngLat = lngLatOnMap(map, event.point);
+          if (lngLat) mapClickRef.current(lngLat.wrap());
+          return;
+        }
+        if (!latestRef.current?.scene.picking) return;
         if (origin instanceof Element && origin.closest(".maplibregl-marker")) return;
         // A click in the space around the globe places nothing.
         const lngLat = lngLatOnMap(map, event.point);
@@ -1692,6 +1701,11 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     loaded,
     styleRevision,
     zoom,
+    // The map and the MapLibre namespace for markers of other parts of the
+    // map (null until loaded), and the slot for a click they want.
+    getMap: useCallback(() => mapRef.current, []),
+    getLibrary: useCallback(() => libraryRef.current, []),
+    mapClickRef,
     // Whether the satellite map draws MapTiler's close-up imagery: the build
     // has a key, MapTiler answered its TileJSON and has not refused it since.
     detailImagery: Boolean(MAPTILER_KEY) && detailReady && !detailRefused,
