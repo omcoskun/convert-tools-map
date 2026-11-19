@@ -5,10 +5,14 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 5
-    # The library is upgraded deliberately, together with test/fixtures and
-    # the README's accuracy table; Dependabot also has no token for it.
     ignore:
+      # The library is upgraded deliberately, together with test/fixtures and
+      # the README's accuracy table; Dependabot also has no token for it.
       - dependency-name: "@omcoskun/convert-tools"
+      # Major upgrades change the team stack (React 18, MUI 5, Babel 7,
+      # webpack 5) and are made on purpose, not as a Dependabot bump.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /
