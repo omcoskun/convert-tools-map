@@ -136,7 +136,7 @@
             "maxzoom": 8
           },
           "detail": {
-            "url": "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key={key}",
+            "url": "https://api.maptiler.com/tiles/satellite-v2/tiles.json?key={key}",
             "tileSize": 512,
             "minzoom": 13,
             "logo": { "src": "https://api.maptiler.com/resources/logo.svg", "href": "https://www.maptiler.com" },

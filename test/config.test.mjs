@@ -177,7 +177,9 @@ test("the satellite's close-up imagery is MapTiler's, its key added at build tim
   const satellite = config.map.basemaps.find((basemap) => basemap.id === "satellite");
   const { detail } = satellite.raster;
   // The Tiles API's TileJSON (free plan, no card); {key} is filled in from MAPTILER_KEY.
-  assert.equal(detail.url, "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key={key}");
+  // satellite-v2 is the tileset the site's key serves (satellite-v4 answers 404);
+  // its tiles are 512 px JPEGs up to zoom 22 (checked on the live site).
+  assert.equal(detail.url, "https://api.maptiler.com/tiles/satellite-v2/tiles.json?key={key}");
   assert.equal(detail.tileSize, 512);
   // Above EOX only where EOX runs out of detail.
   assert.equal(detail.minzoom, 13);

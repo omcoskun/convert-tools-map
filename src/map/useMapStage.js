@@ -677,6 +677,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   // The zoom when the view last settled (moveend), for the credits list.
   const [zoom, setZoom] = useState(null);
   const [detailRefused, setDetailRefused] = useState(false);
+  // Whether MapTiler answered the close-up imagery's TileJSON for this style:
+  // its logo and credit show only then.
+  const [detailReady, setDetailReady] = useState(false);
   const [status, setStatus] = useState("loading");
   const [basemapStatus, setBasemapStatus] = useState("loading");
   const [loaded, setLoaded] = useState({ id: null, tone: source.tone });
@@ -1282,6 +1285,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
 
       map.on("style.load", () => {
         const current = sourceRef.current;
+        setDetailReady(false);
         if (basemapState.remote) {
           basemapState.styleLoaded = true;
           window.clearTimeout(styleTimer);
@@ -1353,6 +1357,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         }
       };
       map.on("data", recordTileSample);
+      map.on("sourcedata", (event) => {
+        if (event.sourceId === DETAIL_SOURCE && event.sourceDataType === "metadata") setDetailReady(true);
+      });
 
       map.on("click", (event) => {
         // A click on an earthquake cluster opens it, in every mode, and places nothing.
@@ -1776,9 +1783,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     loaded,
     styleRevision,
     zoom,
-    // Whether the satellite map may draw MapTiler's close-up imagery: the
-    // build has a key and MapTiler has not refused it.
-    detailImagery: Boolean(MAPTILER_KEY) && !detailRefused,
+    // Whether the satellite map draws MapTiler's close-up imagery: the build
+    // has a key, MapTiler answered its TileJSON and has not refused it since.
+    detailImagery: Boolean(MAPTILER_KEY) && detailReady && !detailRefused,
     subscribeView,
     readCamera,
     measureScale,

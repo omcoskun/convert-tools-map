@@ -234,7 +234,7 @@ test("a fallback imagery source sits under the sharp imagery", () => {
   assert.deepEqual(style.sources[SATELLITE_FALLBACK_SOURCE], { type: "raster", tiles: [raster.fallback.tiles], tileSize: 256, maxzoom: 8 });
 });
 
-const DETAIL = Object.freeze({ url: "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key={key}", tileSize: 512, minzoom: 13 });
+const DETAIL = Object.freeze({ url: "https://api.maptiler.com/tiles/satellite-v2/tiles.json?key={key}", tileSize: 512, minzoom: 13 });
 
 test("MapTiler's close-up imagery is drawn above EOX from its first zoom, and only with a key", () => {
   const raster = { tiles: "https://imagery.example/{z}/{y}/{x}.jpg", maxzoom: 14, detail: DETAIL };
@@ -247,7 +247,7 @@ test("MapTiler's close-up imagery is drawn above EOX from its first zoom, and on
   // MapTiler's TileJSON names the tiles and their zooms; the key rides in its query.
   assert.deepEqual(keyed.sources[DETAIL_SOURCE], {
     type: "raster",
-    url: "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key=Abc_123-x",
+    url: "https://api.maptiler.com/tiles/satellite-v2/tiles.json?key=Abc_123-x",
     tileSize: 512,
   });
   assert.deepEqual(keyed.layers.map((layer) => layer.id).slice(0, 3), ["background", SATELLITE_SOURCE, DETAIL_LAYER]);
@@ -267,7 +267,13 @@ test("only MapTiler refusing the key or the quota turns the close-up imagery off
   for (const status of [401, 403, 429]) {
     assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: { status } }), true, String(status));
   }
+  // Without its TileJSON the source can never draw: any failure of it counts.
+  for (const status of [404, 500]) {
+    const error = { status, url: "https://api.maptiler.com/tiles/satellite-v2/tiles.json?key=k" };
+    assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error }), true, `TileJSON ${status}`);
+  }
   // A missing tile or a network hiccup is not a refusal.
+  assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: { status: 404, url: "https://api.maptiler.com/tiles/satellite-v2/13/1/2?key=k" } }), false);
   assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: { status: 404 } }), false);
   assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: new Error("Failed to fetch") }), false);
   assert.equal(isDetailRefusal({ sourceId: SATELLITE_SOURCE, error: { status: 403 } }), false);

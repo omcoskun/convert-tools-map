@@ -130,9 +130,15 @@ export const DETAIL_LAYER = "convert-satellite-detail";
 // quota (429): the close-up imagery is then dropped until the page reloads.
 const DETAIL_REFUSALS = new Set([401, 403, 429]);
 
-/** Whether a map error is MapTiler refusing the close-up imagery's key or quota. */
+/**
+ * Whether a map error ends the close-up imagery for this page: MapTiler
+ * refusing the key or the quota, or its TileJSON failing (without it the
+ * source can never draw). A single missing tile does not.
+ */
 export function isDetailRefusal(event) {
-  return event?.sourceId === DETAIL_SOURCE && DETAIL_REFUSALS.has(event.error?.status);
+  if (event?.sourceId !== DETAIL_SOURCE) return false;
+  const { status, url } = event.error ?? {};
+  return DETAIL_REFUSALS.has(status) || (typeof url === "string" && url.includes("/tiles.json"));
 }
 
 // Kept from the vector style over imagery: boundaries and the names of
