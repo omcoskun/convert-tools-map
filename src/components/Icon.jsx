@@ -119,6 +119,19 @@ const PATHS = {
     </>
   ),
   locate: <path d="M20.5 3.5 3.5 10.6l7.2 2.7 2.7 7.2 7.1-17Z" />,
+  link: (
+    <>
+      <path d="M10.5 13.5a3.8 3.8 0 0 0 5.4 0l3-3a3.8 3.8 0 0 0-5.4-5.4l-1.2 1.2" />
+      <path d="M13.5 10.5a3.8 3.8 0 0 0-5.4 0l-3 3a3.8 3.8 0 0 0 5.4 5.4l1.2-1.2" />
+    </>
+  ),
+  fullscreen: (
+    <>
+      <path d="M3 7.5v-3A1.5 1.5 0 0 1 4.5 3h3m9 0h3A1.5 1.5 0 0 1 21 4.5v3m0 9v3a1.5 1.5 0 0 1-1.5 1.5h-3m-9 0h-3A1.5 1.5 0 0 1 3 19.5v-3" />
+      <rect x="7.5" y="8.5" width="9" height="7" rx="1.2" />
+    </>
+  ),
+  fullscreenExit: <path d="M7.5 3v3A1.5 1.5 0 0 1 6 7.5H3m18 0h-3A1.5 1.5 0 0 1 16.5 6V3m0 18v-3a1.5 1.5 0 0 1 1.5-1.5h3m-18 0h3A1.5 1.5 0 0 1 7.5 18v3" />,
   // A friendly land unit's frame with the infantry cross.
   symbol: (
     <>

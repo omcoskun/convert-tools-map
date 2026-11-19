@@ -243,8 +243,19 @@ Değişmeyen kurallar:
   sayar: bir atfın `minzoom`/`maxzoom` alanı kaynağının hangi düzeylerde
   çizildiğini söyler (Natural Earth 7'nin, NASA 8'in altında, MapTiler 13 ve
   üstünde); yükseklik karoları yalnız katmanları açıkken yazılır.
-- Haritada sağ tık (dokunmatikte uzun basış) noktayı ondalık derece ve MGRS
-  olarak gösterir; her biri tek tıkla kopyalanır. Noktanın yaklaşık
+- Adres haritanın görünümünü taşır: `?map=yakınlaştırma/enlem/boylam`
+  (döndürülmüş ya da eğik haritada `/yön/eğim` de eklenir;
+  `src/map/view-link.js`). Harita durunca adres çubuğu güncellenir, araç
+  bağlantıları (`#measure`, `#positions`, …) bunu korur ve böyle bir
+  bağlantı açılınca harita sahneye sığdırılmadan o görünümde başlar.
+  Kontrol sütunundaki zincir düğmesi bu bağlantıyı kopyalar. Tarayıcı izin
+  veriyorsa (iPhone'da yoktur) bir düğme sayfayı tam ekrana alır. Site başka
+  bir sayfanın çerçevesinde (iframe) açılınca tekerlek ve tek parmak o
+  sayfayı kaydırır; harita Ctrl/⌘ ile tekerlekle, iki parmakla gezilir.
+- Haritada sağ tık (dokunmatikte uzun basış) altlığın o noktada çizdiği
+  adları (yer, cadde, su ya da park ve en küçük yerleşim; istek yapılmaz,
+  `src/map/places.js`) ve noktayı ondalık derece ile MGRS olarak gösterir;
+  koordinat ile MGRS tek tıkla kopyalanır. Noktanın yaklaşık
   yüksekliği de yazılır: 14. düzeydeki Terrarium karosunun tek pikselinden
   okunur (`src/map/elevation.js`); yalnız gösterimdir, hiçbir hesaba girmez. "Konumum" tarayıcının
   konum özelliğini kullanır ve jeodezik bir doğruluk çemberi çizer; konum

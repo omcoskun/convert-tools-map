@@ -434,7 +434,14 @@
       "symbolClearYes": "Kaldır",
       "symbolSource": "Semboller milsymbol ile çizilir (omcoskun çatalı, MIT).",
       "symbolMarker": "{name}. Düzenlemek için Enter, silmek için Delete; taşımak için sürükleyin.",
-      "symbolUnnamed": "Askerî sembol"
+      "symbolUnnamed": "Askerî sembol",
+      "mapGestureWindows": "Haritayı yakınlaştırmak için Ctrl tuşunu basılı tutup kaydırın",
+      "mapGestureMac": "Haritayı yakınlaştırmak için ⌘ tuşunu basılı tutup kaydırın",
+      "mapGestureMobile": "Haritayı kaydırmak için iki parmak kullanın",
+      "mapShareLink": "Bu görünümün bağlantısını kopyala",
+      "mapLinkCopied": "Bağlantı kopyalandı",
+      "mapFullscreen": "Tam ekran",
+      "mapExitFullscreen": "Tam ekrandan çık"
     },
     "units": {
       "millimetre": "Milimetre",
@@ -928,7 +935,14 @@
       "symbolClearYes": "Remove",
       "symbolSource": "Symbols are drawn with milsymbol (omcoskun fork, MIT).",
       "symbolMarker": "{name}. Enter to edit, Delete to remove; drag to move.",
-      "symbolUnnamed": "Military symbol"
+      "symbolUnnamed": "Military symbol",
+      "mapGestureWindows": "Use Ctrl + scroll to zoom the map",
+      "mapGestureMac": "Use ⌘ + scroll to zoom the map",
+      "mapGestureMobile": "Use two fingers to move the map",
+      "mapShareLink": "Copy a link to this view",
+      "mapLinkCopied": "Link copied",
+      "mapFullscreen": "Full screen",
+      "mapExitFullscreen": "Exit full screen"
     },
     "units": {
       "millimetre": "Millimetre",

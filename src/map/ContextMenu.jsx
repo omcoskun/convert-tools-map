@@ -1,6 +1,7 @@
-// The map's context menu (right click or long press): the coordinate of the
-// point, its approximate elevation from the terrain tiles (elevation.js), and
-// two copy items, plain coordinates and MGRS. The parent gives the
+// The map's context menu (right click or long press): the names the basemap
+// draws there (places.js), the coordinate of the point, its approximate
+// elevation from the terrain tiles (elevation.js), and two copy items, plain
+// coordinates and MGRS. The parent gives the
 // position (px in its own box); the menu flips and clamps itself to stay
 // inside it. Arrow keys, Home and End move between the items; Esc, Tab and a
 // press outside close it.
@@ -29,7 +30,7 @@ function spaceMgrs(code) {
 
 /**
  * @param {{
- *   menu: { x: number, y: number, latitude: number, longitude: number, elevation?: number | null } | null,
+ *   menu: { x: number, y: number, latitude: number, longitude: number, elevation?: number | null, places?: string[] } | null,
  *   onClose: () => void,
  * }} props
  *   elevation: metres once read, undefined while it is read, null when there
@@ -174,6 +175,11 @@ export default function ContextMenu({ menu, onClose }) {
       }}
     >
       <Box sx={{ px: 1.25, py: 0.75, fontFamily: MONO_FONT, fontVariantNumeric: "tabular-nums", fontSize: TYPE.meta, color: COLORS.muted, userSelect: "text" }}>
+        {menu.places?.length > 0 && (
+          <Box component="span" sx={{ display: "block", maxWidth: 280, mb: 0.25, fontFamily: UI_FONT, fontSize: TYPE.small, fontWeight: 650, color: COLORS.ink, lineHeight: 1.35 }}>
+            {menu.places.join(" · ")}
+          </Box>
+        )}
         {coordinates}
         {elevation && (
           <Box component="span" aria-live="polite" sx={{ display: "block", mt: 0.25, fontFamily: UI_FONT, fontVariantNumeric: "tabular-nums" }}>

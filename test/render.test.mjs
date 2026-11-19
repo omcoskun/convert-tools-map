@@ -660,3 +660,22 @@ test("the context menu shows the point's approximate elevation once it is read, 
   assert.ok((await contextMenuText(undefined)).includes(`${tr} …`));
   assert.ok(!(await contextMenuText(null)).includes(tr));
 });
+
+test("the context menu names what the basemap draws at the point, above its coordinates, and nothing when there is nothing", async () => {
+  const { default: ContextMenu } = await import("../src/map/ContextMenu.jsx");
+  const { LanguageContext } = await import("../src/context.js");
+  const render = (places) =>
+    visibleText(
+      renderToString(
+        createElement(
+          LanguageContext.Provider,
+          { value: { language: "tr", ...lang.tr } },
+          createElement(ContextMenu, { menu: { x: 10, y: 10, latitude: 39.92, longitude: 32.85, elevation: null, places }, onClose() {} }),
+        ),
+      ),
+    );
+  const named = render(["Güvenpark", "Atatürk Bulvarı", "Çankaya"]);
+  assert.ok(named.startsWith("Güvenpark · Atatürk Bulvarı · Çankaya 39.92000, 32.85000"), named);
+  assert.ok(render([]).startsWith("39.92000, 32.85000"));
+  assert.ok(render(undefined).startsWith("39.92000, 32.85000"));
+});

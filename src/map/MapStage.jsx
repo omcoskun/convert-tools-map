@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon.jsx";
 import { useLanguage, useThemeMode } from "../context.js";
+import { copyText } from "../lib/clipboard.js";
 import { readPref, writePref } from "../lib/prefs.js";
 import { BAR_HEIGHT, COLORS, MONO_FONT, MOTION, PHONE, RADIUS, SHADOW, TYPE, UI_FONT, WORKSPACE } from "../theme.js";
 import { Box, visuallyHidden } from "../ui/index.js";
@@ -301,6 +302,7 @@ export default function MapStage({
   const labels = useMemo(
     () => ({
       mapCanvas: `${text.mapTitle}. ${text.mapPanHint}`,
+      gestures: { windows: text.mapGestureWindows, mac: text.mapGestureMac, mobile: text.mapGestureMobile },
       continents: {
         northAmerica: text.mapContinentNorthAmerica,
         southAmerica: text.mapContinentSouthAmerica,
@@ -358,6 +360,39 @@ export default function MapStage({
   useEffect(() => {
     onStatusChange(status);
   }, [status, onStatusChange]);
+
+  // The whole page in the browser's full screen, where the browser allows it
+  // (not on an iPhone, nor in a frame that does not allow it).
+  const [canFullscreen, setCanFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    setCanFullscreen(Boolean(document.fullscreenEnabled));
+    const update = () => setFullscreen(Boolean(document.fullscreenElement));
+    update();
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    const request = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    request?.catch?.(() => {});
+  }, []);
+
+  // A link to this view (?map=, view-link.js), copied.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const { viewLink } = map;
+  const copyLink = useCallback(async () => {
+    try {
+      await copyText(viewLink());
+      setLinkCopied(true);
+    } catch {
+      setLinkCopied(false);
+    }
+  }, [viewLink]);
+  useEffect(() => {
+    if (!linkCopied) return undefined;
+    const timer = window.setTimeout(() => setLinkCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [linkCopied]);
 
   // Escape leaves picking first, then the enlarged view. The panel and the
   // point menu handle their own Escape first.
@@ -559,6 +594,9 @@ export default function MapStage({
       <Box role="status" sx={visuallyHidden}>
         {picking?.label ?? ""}
       </Box>
+      <Box role="status" sx={visuallyHidden}>
+        {linkCopied ? text.mapLinkCopied : ""}
+      </Box>
 
       {/* The control column: what the map shows, where it looks, what it does. */}
       <Box
@@ -623,6 +661,15 @@ export default function MapStage({
             pressed={location.status === "on" || location.status === "searching"}
             busy={location.status === "searching"}
           />
+          <ControlButton label={linkCopied ? text.mapLinkCopied : text.mapShareLink} icon={linkCopied ? "check" : "link"} onClick={copyLink} disabled={!ready} />
+          {canFullscreen && (
+            <ControlButton
+              label={fullscreen ? text.mapExitFullscreen : text.mapFullscreen}
+              icon={fullscreen ? "fullscreenExit" : "fullscreen"}
+              onClick={toggleFullscreen}
+              pressed={fullscreen}
+            />
+          )}
           <ControlButton
             label={expanded ? text.mapCollapse : text.mapExpand}
             icon={expanded ? "collapse" : "expand"}

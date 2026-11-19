@@ -57,6 +57,8 @@ import { loadMapLibre, webgl2Available } from "./maplibre.js";
 import { createNightLayer } from "./night-layer.js";
 import { mgrsZoneFeatures } from "./mgrs-zones.js";
 import { createElevationReader, loadImageData } from "./elevation.js";
+import { placesAt } from "./places.js";
+import { formatViewParam, searchWithView, viewFromSearch } from "./view-link.js";
 import {
   COLOR_RELIEF_LAYER,
   EXAGGERATIONS,
@@ -130,6 +132,29 @@ const CURSOR_DECIMALS = 5;
 const START_VIEW = Object.freeze({ center: [24, 30], zoom: 1.6 });
 // Absolute library limits; transformConstrain applies the viewport-aware floor.
 const ZOOM_RANGE = Object.freeze({ minZoom: -2, maxZoom: 20 });
+
+// The point menu names what the basemap draws this close to the point (px),
+// and the settlement whose name is drawn a little further away.
+const PLACE_BOX = 14;
+const SETTLEMENT_BOX = 72;
+// The address follows the view this long after it settles (ms).
+const VIEW_LINK_DELAY_MS = 400;
+
+/** Inside another page's frame, where a wheel or one finger should scroll that page. */
+function embedded() {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true;
+  }
+}
+
+/** The address of the page with the map at this view (location.search's map=). */
+function addressWithView(map) {
+  const center = map.getCenter();
+  const param = formatViewParam({ zoom: map.getZoom(), lat: center.lat, lng: wrapLongitude(center.lng), bearing: map.getBearing(), pitch: map.getPitch() });
+  return `${window.location.pathname}${searchWithView(window.location.search, param)}${window.location.hash}`;
+}
 
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 const animation = (ms) => (reducedMotion() ? 0 : ms);
@@ -630,6 +655,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const locationRef = useRef({ watch: null, fix: null, marker: null, flown: false });
   const menuOpenRef = useRef(false);
   const updateGridRef = useRef(null);
+  const writeViewLinkRef = useRef(null);
 
   const basemapIds = useMemo(() => basemaps.map((entry) => entry.id), [basemaps]);
   const [basemapId, setBasemapId] = useState(() => readPref("map-basemap", defaultBasemap, basemapIds));
@@ -1067,7 +1093,10 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       }
       if (disposed || !container) return;
       const latest = latestRef.current;
-      const initialBounds = sceneBounds(latest.scene);
+      // A shared link (?map=) opens the map at its view instead of fitting the scene.
+      const linked = viewFromSearch(window.location.search);
+      const initialBounds = linked ? null : sceneBounds(latest.scene);
+      if (linked) navigatedRef.current = true;
       loadRemoteStyle();
       appliedRef.current = { key: sourceRef.current.key, mode: latest.mode };
       try {
@@ -1075,11 +1104,13 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
           container,
           style: sourceRef.current.url,
           transformStyle,
-          ...(initialBounds && !isSinglePoint(initialBounds)
-            ? { bounds: initialBounds, fitBoundsOptions: { padding: latest.getPadding(), maxZoom: 15 } }
-            : initialBounds
-              ? { center: initialBounds[0], zoom: 10 }
-              : START_VIEW),
+          ...(linked
+            ? { center: [linked.lng, linked.lat], zoom: linked.zoom, bearing: linked.bearing, pitch: linked.pitch }
+            : initialBounds && !isSinglePoint(initialBounds)
+              ? { bounds: initialBounds, fitBoundsOptions: { padding: latest.getPadding(), maxZoom: 15 } }
+              : initialBounds
+                ? { center: initialBounds[0], zoom: 10 }
+                : START_VIEW),
           attributionControl: false,
           maplibreLogo: false,
           renderWorldCopies: true,
@@ -1101,8 +1132,14 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
           dragRotate: true,
           pitchWithRotate: true,
           touchPitch: true,
-          // Wheel, trackpad and pinch zoom without a modifier key.
-          cooperativeGestures: false,
+          // Wheel, trackpad and pinch zoom without a modifier key, except
+          // inside another page, whose scrolling a wheel or a finger keeps.
+          cooperativeGestures: embedded(),
+          locale: {
+            "CooperativeGesturesHandler.WindowsHelpText": latest.labels.gestures.windows,
+            "CooperativeGesturesHandler.MacHelpText": latest.labels.gestures.mac,
+            "CooperativeGesturesHandler.MobileHelpText": latest.labels.gestures.mobile,
+          },
           clickTolerance: 4,
           fadeDuration: 120,
           // Sharp enough on any screen; a 3x phone draws 2.25x fewer pixels.
@@ -1174,11 +1211,23 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       });
       map.on("rotate", updateCompass);
       map.on("pitch", updateCompass);
+      // The address follows the view, so it can be copied and shared.
+      let viewLinkTimer = 0;
+      writeViewLinkRef.current = () => {
+        window.clearTimeout(viewLinkTimer);
+        if (probingRef.current) return;
+        const address = addressWithView(map);
+        if (address !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+          window.history.replaceState(window.history.state, "", address);
+        }
+      };
       map.on("moveend", () => {
         updateNavigation();
         updateCompass();
         setZoom(map.getZoom());
         updateGridRef.current?.();
+        window.clearTimeout(viewLinkTimer);
+        viewLinkTimer = window.setTimeout(() => writeViewLinkRef.current?.(), VIEW_LINK_DELAY_MS);
       });
       map.on("resize", syncView);
       syncView();
@@ -1329,7 +1378,15 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         const latitude = Math.max(-90, Math.min(90, lngLat.lat));
         const longitude = wrapLongitude(lngLat.lng);
         const readElevation = elevationReaderRef.current;
-        setContextMenu({ x, y, latitude, longitude, elevation: readElevation ? undefined : null });
+        let places = [];
+        try {
+          const around = (box) => map.queryRenderedFeatures([[x - box, y - box], [x + box, y + box]]);
+          const settlements = around(SETTLEMENT_BOX).filter((feature) => feature.sourceLayer === "place");
+          places = placesAt([...around(PLACE_BOX), ...settlements], latestRef.current.language);
+        } catch {
+          // A style still loading has nothing to query.
+        }
+        setContextMenu({ x, y, latitude, longitude, zoom: map.getZoom(), places, elevation: readElevation ? undefined : null });
         // The elevation arrives when its tile has loaded, for this point only.
         readElevation?.(latitude, longitude).then((elevation) => {
           if (disposed) return;
@@ -1671,6 +1728,12 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     setInitAttempt((value) => value + 1);
   }, []);
 
+  /** The page's address with the map's current view (also written to the address bar). */
+  const viewLink = useCallback(() => {
+    writeViewLinkRef.current?.();
+    return window.location.href;
+  }, []);
+
   const zoomIn = useCallback(() => zoomBy(1), [zoomBy]);
   const zoomOut = useCallback(() => zoomBy(-1), [zoomBy]);
 
@@ -1714,6 +1777,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     measureScale,
     contextMenu,
     closeContextMenu,
+    viewLink,
     location,
     toggleLocation,
   };
