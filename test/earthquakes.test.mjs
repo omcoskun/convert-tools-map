@@ -46,9 +46,11 @@ test("the heatmap weighs each earthquake by its magnitude and gives way to point
   assert.equal(layer.type, "heatmap");
   assert.equal(layer.source, EARTHQUAKE_SOURCE);
   assert.equal(layer.maxzoom, 9);
-  assert.deepEqual(layer.paint["heatmap-weight"], ["interpolate", ["linear"], MAGNITUDE, 2.5, 0.15, 7, 1]);
-  assert.deepEqual(layer.paint["heatmap-intensity"], ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3]);
-  assert.deepEqual(layer.paint["heatmap-radius"], ["interpolate", ["linear"], ["zoom"], 0, 4, 9, 22]);
+  // A week of M2.5+ is about 300 scattered events: the spots are wide and
+  // strong enough to read on the whole globe, not faint specks.
+  assert.deepEqual(layer.paint["heatmap-weight"], ["interpolate", ["linear"], MAGNITUDE, 2.5, 0.3, 7, 1]);
+  assert.deepEqual(layer.paint["heatmap-intensity"], ["interpolate", ["linear"], ["zoom"], 0, 1.5, 9, 3]);
+  assert.deepEqual(layer.paint["heatmap-radius"], ["interpolate", ["linear"], ["zoom"], 0, 10, 4, 18, 9, 30]);
   assert.deepEqual(layer.paint["heatmap-opacity"], ["interpolate", ["linear"], ["zoom"], 7, 0.85, 9, 0]);
   const colour = layer.paint["heatmap-color"];
   assert.deepEqual(colour.slice(0, 3), ["interpolate", ["linear"], ["heatmap-density"]]);

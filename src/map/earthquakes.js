@@ -62,7 +62,11 @@ function magnitudeColor() {
   return ["interpolate", ["linear"], MAGNITUDE, 2.5, "#fdd49e", 4.5, "#fc8d59", 6, "#d7301f", 7, "#7f0000"];
 }
 
-/** The heatmap of the earthquakes, weighted by magnitude (no parameter: its colours read on every basemap). */
+/**
+ * The heatmap of the earthquakes, weighted by magnitude (no parameter: its
+ * colours read on every basemap). A week of M2.5+ is a few hundred scattered
+ * events, so the spots are wide and strong enough to read on the whole globe.
+ */
 export function earthquakeHeatLayer() {
   return {
     id: EARTHQUAKE_HEAT_LAYER,
@@ -70,9 +74,9 @@ export function earthquakeHeatLayer() {
     source: EARTHQUAKE_SOURCE,
     maxzoom: 9,
     paint: {
-      "heatmap-weight": ["interpolate", ["linear"], MAGNITUDE, 2.5, 0.15, 7, 1],
-      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
-      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 4, 9, 22],
+      "heatmap-weight": ["interpolate", ["linear"], MAGNITUDE, 2.5, 0.3, 7, 1],
+      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 9, 3],
+      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 10, 4, 18, 9, 30],
       "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 0.85, 9, 0],
       "heatmap-color": [
         "interpolate",
