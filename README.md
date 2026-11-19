@@ -202,7 +202,8 @@ Değişmeyen kurallar:
   bölgeleri ve son 7 günün depremleri (bu üçü varsayılan kapalı). Depremler
   USGS'nin ücretsiz akışından gelir (M2.5 ve üstü, anahtar gerekmez): uzakta
   büyüklüğe göre ısı haritası, yakınlaştırınca büyüklüğe göre boyanmış
-  noktalar.
+  noktalar. Gösterim "Kümeler" seçilirse yakın depremler sayılarıyla
+  gruplanır; bir kümeye tıklayınca harita onu açacak kadar yakınlaşır.
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
   sol üstte): yakınlaşırken görünür, sonra silinir; tıklayınca
   metrik, deniz mili ve imperial arasında döner; katman panelinden sabitlenebilir.

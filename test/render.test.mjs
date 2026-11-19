@@ -578,6 +578,7 @@ async function layerPanel(terrain, extra = {}) {
           onToggleBuildings() {},
           earthquakes: null,
           onToggleEarthquakes() {},
+          onChooseEarthquakeView() {},
           ...extra,
         }),
       ),
@@ -645,6 +646,20 @@ test("the layers section has an earthquakes switch when config.json has a feed",
   assert.equal(switchState(off, words.mapEarthquakes), "false");
   const none = await layerPanel(null, { earthquakes: null });
   assert.ok(!visibleText(none).includes(words.mapEarthquakes));
+});
+
+test("while the earthquakes show, a choice switches between the heatmap and the clusters", async () => {
+  const words = lang.tr.text;
+  const heat = await layerPanel(null, { earthquakes: { on: true, view: "heat" } });
+  const group = element(heat, `aria-label="${words.mapEarthquakeView}"`);
+  assert.match(group, /role="radiogroup"/);
+  assert.ok(visibleText(group).includes(words.mapEarthquakeHeat));
+  assert.ok(visibleText(group).includes(words.mapEarthquakeClusters));
+  assert.match(group, new RegExp(`role="radio" aria-checked="true"[^>]*>${words.mapEarthquakeHeat}<`));
+  const clusters = await layerPanel(null, { earthquakes: { on: true, view: "clusters" } });
+  assert.match(element(clusters, `aria-label="${words.mapEarthquakeView}"`), new RegExp(`role="radio" aria-checked="true"[^>]*>${words.mapEarthquakeClusters}<`));
+  const off = await layerPanel(null, { earthquakes: { on: false, view: "clusters" } });
+  assert.equal(element(off, `aria-label="${words.mapEarthquakeView}"`), null);
 });
 
 /** ContextMenu for Ankara, in `language`, with this elevation state. */

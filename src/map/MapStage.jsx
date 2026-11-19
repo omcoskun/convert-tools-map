@@ -624,6 +624,7 @@ export default function MapStage({
           onToggleBuildings={map.toggleBuildings}
           earthquakes={earthquakes ? map.earthquakes : null}
           onToggleEarthquakes={map.toggleEarthquakes}
+          onChooseEarthquakeView={map.chooseEarthquakeView}
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />

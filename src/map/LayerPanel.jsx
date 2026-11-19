@@ -114,9 +114,8 @@ const MIN_HEIGHT = 160;
 
 const sectionTitleSx = { m: 0, mb: 1, fontSize: TYPE.label, fontWeight: 650, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.muted };
 
-/** The vertical exaggeration as a segmented radio group ("1×", "1,5×", "2×"). */
-function ExaggerationChoice({ label, language, value, onChoose }) {
-  const format = new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US");
+/** A choice of a few options as a segmented radio group: each radio shows its option's text and the arrow keys move the choice. */
+function SegmentedChoice({ label, options, value, onChoose }) {
   function onKey(event) {
     const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
     const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
@@ -126,7 +125,7 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
     const index = radios.indexOf(document.activeElement);
     const next = (index + (forward ? 1 : -1) + radios.length) % radios.length;
     radios[next]?.focus();
-    onChoose(EXAGGERATIONS[next]);
+    onChoose(options[next].value);
   }
   return (
     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, px: 0.5, minHeight: 40, fontSize: TYPE.small, [PHONE]: { minHeight: 44 } }}>
@@ -139,17 +138,17 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
         onKeyDown={onKey}
         sx={{ display: "flex", p: "2px", borderRadius: `${RADIUS.control}px`, bgcolor: COLORS.paper2 }}
       >
-        {EXAGGERATIONS.map((option) => {
-          const checked = option === value;
+        {options.map((option) => {
+          const checked = option.value === value;
           return (
             <Box
-              key={option}
+              key={option.value}
               component="button"
               type="button"
               role="radio"
               aria-checked={checked}
               tabIndex={checked ? 0 : -1}
-              onClick={() => onChoose(option)}
+              onClick={() => onChoose(option.value)}
               sx={{
                 minWidth: 40,
                 height: 28,
@@ -169,7 +168,7 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
                 [PHONE]: { height: 34 },
               }}
             >
-              {`${format.format(option)}×`}
+              {option.text}
             </Box>
           );
         })}
@@ -193,8 +192,9 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
  *   onChooseExaggeration: (value: number) => void,
  *   buildings: boolean,
  *   onToggleBuildings: () => void,
- *   earthquakes: { on: boolean } | null,
+ *   earthquakes: { on: boolean, view: "heat" | "clusters" } | null,
  *   onToggleEarthquakes: () => void,
+ *   onChooseEarthquakeView: (view: "heat" | "clusters") => void,
  *   scalePinned: boolean,
  *   onToggleScalePinned: () => void,
  * }} props
@@ -219,8 +219,10 @@ export default function LayerPanel({
   onToggleBuildings,
   earthquakes,
   onToggleEarthquakes,
+  onChooseEarthquakeView,
 }) {
   const { text, language } = useLanguage();
+  const format = new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US");
   const panelRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -377,7 +379,12 @@ export default function LayerPanel({
           <SwitchRow label={text.mapColorRelief} checked={terrain.colorRelief} onToggle={() => onToggleTerrain("colorRelief")} />
           <SwitchRow label={text.mapTerrain3d} checked={terrain.threeD} onToggle={() => onToggleTerrain("threeD")} />
           {terrain.threeD && (
-            <ExaggerationChoice label={text.mapExaggeration} language={language} value={terrain.exaggeration} onChoose={onChooseExaggeration} />
+            <SegmentedChoice
+              label={text.mapExaggeration}
+              options={EXAGGERATIONS.map((option) => ({ value: option, text: `${format.format(option)}×` }))}
+              value={terrain.exaggeration}
+              onChoose={onChooseExaggeration}
+            />
           )}
         </Box>
       )}
@@ -388,6 +395,7 @@ export default function LayerPanel({
       <SwitchRow label={text.mapGraticule} checked={overlays.graticule} onToggle={() => onToggleOverlay("graticule")} />
       <SwitchRow label={text.mapMgrsZones} checked={overlays.mgrs} onToggle={() => onToggleOverlay("mgrs")} />
       {earthquakes && <SwitchRow label={text.mapEarthquakes} checked={earthquakes.on} onToggle={onToggleEarthquakes} />}
+      {earthquakes?.on && <SegmentedChoice label={text.mapEarthquakeView} options={[{ value: "heat", text: text.mapEarthquakeHeat }, { value: "clusters", text: text.mapEarthquakeClusters }]} value={earthquakes.view} onChoose={onChooseEarthquakeView} />}
       <SwitchRow label={text.mapScaleAlways} checked={scalePinned} onToggle={onToggleScalePinned} />
     </Box>
   );

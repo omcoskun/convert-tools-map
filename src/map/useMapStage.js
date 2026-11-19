@@ -25,12 +25,21 @@ import {
   styleBuildingExtrusions,
 } from "./buildings.js";
 import {
+  EARTHQUAKE_CLUSTER_COUNT_LAYER,
+  EARTHQUAKE_CLUSTER_LAYER,
+  EARTHQUAKE_CLUSTER_SOURCE,
   EARTHQUAKE_HEAT_LAYER,
   EARTHQUAKE_POINT_LAYER,
-  EARTHQUAKE_SOURCE,
+  EARTHQUAKE_SINGLE_LAYER,
+  EARTHQUAKE_VIEWS,
+  earthquakeClusterCountLayer,
+  earthquakeClusterLayer,
+  earthquakeClusterSource,
   earthquakeHeatLayer,
   earthquakePointLayer,
+  earthquakeSingleLayer,
   earthquakeSource,
+  earthquakeViewParts,
   earthquakesBeforeId,
   isEarthquakeSource,
 } from "./earthquakes.js";
@@ -645,7 +654,10 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     exaggeration: readPref("map-exaggeration", 1, EXAGGERATIONS),
   }));
   const [buildings, setBuildings] = useState(() => readPref("map-buildings", true));
-  const [earthquakeView, setEarthquakeView] = useState(() => ({ on: readPref("map-earthquakes", false) }));
+  const [earthquakeView, setEarthquakeView] = useState(() => ({
+    on: readPref("map-earthquakes", false),
+    view: readPref("map-earthquake-view", "heat", EARTHQUAKE_VIEWS),
+  }));
   const elevationReader = useMemo(() => (terrain ? createElevationReader(terrain, { load: loadImageData }) : null), [terrain]);
   const elevationReaderRef = useRef(elevationReader);
   const source = useMemo(() => basemapSource(findBasemap(basemaps, basemapId), mode), [basemaps, basemapId, mode]);
@@ -772,15 +784,32 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     const map = mapRef.current;
     const latest = latestRef.current;
     if (!map || !latest?.earthquakes || !basemapRef.current.remote || !map.getLayer(CASING_LAYER)) return;
-    if (!latest.earthquakeView.on) {
-      for (const id of [EARTHQUAKE_HEAT_LAYER, EARTHQUAKE_POINT_LAYER]) if (map.getLayer(id)) map.removeLayer(id);
-      if (map.getSource(EARTHQUAKE_SOURCE)) map.removeSource(EARTHQUAKE_SOURCE);
-      return;
+    const { on, view } = latest.earthquakeView;
+    const wanted = on ? earthquakeViewParts(view) : null;
+    // The other view's parts go (both views' when switched off).
+    for (const parts of EARTHQUAKE_VIEWS.map(earthquakeViewParts)) {
+      if (parts.source === wanted?.source) continue;
+      for (const id of parts.layers) if (map.getLayer(id)) map.removeLayer(id);
+      if (map.getSource(parts.source)) map.removeSource(parts.source);
     }
-    if (!map.getSource(EARTHQUAKE_SOURCE)) map.addSource(EARTHQUAKE_SOURCE, earthquakeSource(latest.earthquakes));
+    if (!wanted) return;
+    if (!map.getSource(wanted.source)) {
+      map.addSource(wanted.source, wanted.source === EARTHQUAKE_CLUSTER_SOURCE ? earthquakeClusterSource(latest.earthquakes) : earthquakeSource(latest.earthquakes));
+    }
+    const tone = sourceRef.current.tone;
+    const make = {
+      [EARTHQUAKE_HEAT_LAYER]: () => earthquakeHeatLayer(),
+      [EARTHQUAKE_POINT_LAYER]: () => earthquakePointLayer(tone),
+      [EARTHQUAKE_CLUSTER_LAYER]: () => earthquakeClusterLayer(tone),
+      [EARTHQUAKE_CLUSTER_COUNT_LAYER]: () => earthquakeClusterCountLayer(labelFont(map)),
+      [EARTHQUAKE_SINGLE_LAYER]: () => earthquakeSingleLayer(tone),
+    };
     const before = earthquakesBeforeId(map.getStyle().layers);
-    if (!map.getLayer(EARTHQUAKE_HEAT_LAYER)) map.addLayer(earthquakeHeatLayer(), before);
-    if (!map.getLayer(EARTHQUAKE_POINT_LAYER)) map.addLayer(earthquakePointLayer(sourceRef.current.tone), before);
+    for (const id of wanted.layers) {
+      if (map.getLayer(id)) continue;
+      const layer = make[id]();
+      if (layer) map.addLayer(layer, before);
+    }
   }, []);
 
   const setMode = useCallback((next) => {
@@ -901,6 +930,10 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
 
   const toggleEarthquakes = useCallback(() => {
     setEarthquakeView((current) => ({ ...current, on: !current.on }));
+  }, []);
+
+  const chooseEarthquakeView = useCallback((view) => {
+    setEarthquakeView((current) => ({ ...current, view: EARTHQUAKE_VIEWS.includes(view) ? view : "heat" }));
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -1297,6 +1330,18 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       map.on("data", recordTileSample);
 
       map.on("click", (event) => {
+        // A click on an earthquake cluster opens it, in every mode, and places nothing.
+        if (map.getLayer(EARTHQUAKE_CLUSTER_LAYER)) {
+          const [cluster] = map.queryRenderedFeatures(event.point, { layers: [EARTHQUAKE_CLUSTER_LAYER] });
+          if (cluster) {
+            map
+              .getSource(EARTHQUAKE_CLUSTER_SOURCE)
+              ?.getClusterExpansionZoom(cluster.properties.cluster_id)
+              .then((zoom) => map.easeTo({ center: cluster.geometry.coordinates, zoom, duration: animation(500) }))
+              .catch(() => {});
+            return;
+          }
+        }
         if (!latestRef.current?.scene.picking) return;
         const origin = event.originalEvent?.target;
         if (origin instanceof Element && origin.closest(".maplibregl-marker")) return;
@@ -1490,6 +1535,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   // ---- Earthquakes ---------------------------------------------------------
   useEffect(() => {
     writePref("map-earthquakes", earthquakeView.on);
+    writePref("map-earthquake-view", earthquakeView.view);
     if (styleRevision > 0) syncEarthquakes();
   }, [earthquakeView, styleRevision, syncEarthquakes]);
 
@@ -1701,6 +1747,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     toggleBuildings,
     earthquakes: earthquakeView,
     toggleEarthquakes,
+    chooseEarthquakeView,
     loaded,
     styleRevision,
     subscribeView,

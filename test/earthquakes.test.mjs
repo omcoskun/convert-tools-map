@@ -3,12 +3,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EARTHQUAKE_CLUSTER_COUNT_LAYER,
+  EARTHQUAKE_CLUSTER_LAYER,
+  EARTHQUAKE_CLUSTER_SOURCE,
   EARTHQUAKE_HEAT_LAYER,
   EARTHQUAKE_POINT_LAYER,
+  EARTHQUAKE_SINGLE_LAYER,
   EARTHQUAKE_SOURCE,
+  EARTHQUAKE_VIEWS,
+  earthquakeClusterCountLayer,
+  earthquakeClusterLayer,
+  earthquakeClusterSource,
   earthquakeHeatLayer,
   earthquakePointLayer,
+  earthquakeSingleLayer,
   earthquakeSource,
+  earthquakeViewParts,
   earthquakesBeforeId,
   isEarthquakeSource,
 } from "../src/map/earthquakes.js";
@@ -70,4 +80,64 @@ test("the earthquakes go under every label and the app's own lines, above roads"
   assert.equal(earthquakesBeforeId([landuse, roads, names]), "road-names");
   assert.equal(earthquakesBeforeId([landuse, roads]), undefined);
   assert.equal(earthquakesBeforeId(undefined), undefined);
+});
+
+test("the cluster view groups the feed within 50 pixels up to zoom 10 and keeps each group's largest magnitude", () => {
+  assert.equal(EARTHQUAKE_CLUSTER_SOURCE, "convert-earthquakes-clusters");
+  assert.deepEqual(earthquakeClusterSource(FEED), {
+    type: "geojson",
+    data: FEED.data,
+    cluster: true,
+    clusterRadius: 50,
+    clusterMaxZoom: 10,
+    clusterProperties: { maxMag: ["max", MAGNITUDE] },
+  });
+});
+
+test("a cluster is a circle sized by its count and coloured by its largest magnitude, labelled with its count", () => {
+  const circle = earthquakeClusterLayer("light");
+  assert.equal(circle.id, EARTHQUAKE_CLUSTER_LAYER);
+  assert.equal(circle.id, "convert-earthquakes-clusters");
+  assert.equal(circle.type, "circle");
+  assert.equal(circle.source, EARTHQUAKE_CLUSTER_SOURCE);
+  assert.deepEqual(circle.filter, ["has", "point_count"]);
+  assert.deepEqual(circle.paint["circle-radius"], ["step", ["get", "point_count"], 14, 10, 18, 50, 24]);
+  assert.deepEqual(circle.paint["circle-color"], ["step", ["get", "maxMag"], "#fdd49e", 4.5, "#fc8d59", 6, "#d7301f"]);
+  assert.equal(earthquakeClusterLayer("light").paint["circle-stroke-color"], "#ffffff");
+  assert.equal(earthquakeClusterLayer("dark").paint["circle-stroke-color"], "#0b0d10");
+  const count = earthquakeClusterCountLayer(["Noto Sans Regular"]);
+  assert.equal(count.id, EARTHQUAKE_CLUSTER_COUNT_LAYER);
+  assert.equal(count.id, "convert-earthquakes-cluster-count");
+  assert.equal(count.type, "symbol");
+  assert.equal(count.source, EARTHQUAKE_CLUSTER_SOURCE);
+  assert.deepEqual(count.filter, ["has", "point_count"]);
+  assert.deepEqual(count.layout["text-field"], ["get", "point_count_abbreviated"]);
+  assert.deepEqual(count.layout["text-font"], ["Noto Sans Regular"]);
+  // Without the style's glyphs there is no label, only the circles.
+  assert.equal(earthquakeClusterCountLayer(null), null);
+});
+
+test("an earthquake outside every cluster is drawn like a point of the heatmap view, at every zoom", () => {
+  const single = earthquakeSingleLayer("light");
+  const point = earthquakePointLayer("light");
+  assert.equal(single.id, EARTHQUAKE_SINGLE_LAYER);
+  assert.equal(single.id, "convert-earthquakes-single");
+  assert.equal(single.type, "circle");
+  assert.equal(single.source, EARTHQUAKE_CLUSTER_SOURCE);
+  assert.deepEqual(single.filter, ["!", ["has", "point_count"]]);
+  assert.equal(single.minzoom, undefined);
+  assert.deepEqual(single.paint["circle-radius"], point.paint["circle-radius"]);
+  assert.deepEqual(single.paint["circle-color"], point.paint["circle-color"]);
+  assert.equal(earthquakeSingleLayer("dark").paint["circle-stroke-color"], "#0b0d10");
+});
+
+test("each view has its own source and layers; an unknown view is the heatmap", () => {
+  assert.deepEqual(EARTHQUAKE_VIEWS, ["heat", "clusters"]);
+  assert.ok(Object.isFrozen(EARTHQUAKE_VIEWS));
+  assert.deepEqual(earthquakeViewParts("heat"), { source: EARTHQUAKE_SOURCE, layers: [EARTHQUAKE_HEAT_LAYER, EARTHQUAKE_POINT_LAYER] });
+  assert.deepEqual(earthquakeViewParts("clusters"), {
+    source: EARTHQUAKE_CLUSTER_SOURCE,
+    layers: [EARTHQUAKE_CLUSTER_LAYER, EARTHQUAKE_CLUSTER_COUNT_LAYER, EARTHQUAKE_SINGLE_LAYER],
+  });
+  assert.deepEqual(earthquakeViewParts("unknown"), earthquakeViewParts("heat"));
 });
