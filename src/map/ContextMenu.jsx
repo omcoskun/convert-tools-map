@@ -1,5 +1,6 @@
 // The map's context menu (right click or long press): the coordinate of the
-// point and two copy items, plain coordinates and MGRS. The parent gives the
+// point, its approximate elevation from the terrain tiles (elevation.js), and
+// two copy items, plain coordinates and MGRS. The parent gives the
 // position (px in its own box); the menu flips and clamps itself to stay
 // inside it. Arrow keys, Home and End move between the items; Esc, Tab and a
 // press outside close it.
@@ -28,12 +29,14 @@ function spaceMgrs(code) {
 
 /**
  * @param {{
- *   menu: { x: number, y: number, latitude: number, longitude: number } | null,
+ *   menu: { x: number, y: number, latitude: number, longitude: number, elevation?: number | null } | null,
  *   onClose: () => void,
  * }} props
+ *   elevation: metres once read, undefined while it is read, null when there
+ *   is none (no terrain tiles, or they failed).
  */
 export default function ContextMenu({ menu, onClose }) {
-  const { text } = useLanguage();
+  const { text, language } = useLanguage();
   const [copied, setCopied] = useState(null);
   const rootRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -69,8 +72,10 @@ export default function ContextMenu({ menu, onClose }) {
     root.style.top = `${top}px`;
   }, [menu]);
 
+  // Opened for a point; the elevation arriving later is not a new opening.
+  const opening = menu ? `${menu.x} ${menu.y} ${menu.latitude} ${menu.longitude}` : null;
   useEffect(() => {
-    if (!menu) return undefined;
+    if (opening == null) return undefined;
     setCopied(null);
     rootRef.current?.querySelector("[role='menuitem']")?.focus({ preventScroll: true });
     function onPointer(event) {
@@ -78,7 +83,7 @@ export default function ContextMenu({ menu, onClose }) {
     }
     document.addEventListener("pointerdown", onPointer);
     return () => document.removeEventListener("pointerdown", onPointer);
-  }, [menu]);
+  }, [opening]);
 
   useEffect(() => {
     if (copied == null) return undefined;
@@ -137,6 +142,12 @@ export default function ContextMenu({ menu, onClose }) {
   };
 
   const coordinates = `${fixed(menu.latitude, 5)}, ${fixed(menu.longitude, 5)}`;
+  const elevation =
+    menu.elevation === null
+      ? null
+      : menu.elevation === undefined
+        ? `${text.mapElevation} …`
+        : `${text.mapElevation} ≈ ${new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US", { maximumFractionDigits: 0 }).format(menu.elevation)} m`;
   const items = [
     { kind: "coordinates", label: text.mapCopyCoordinates, secondary: null, value: `${fixed(menu.latitude, 6)}, ${fixed(menu.longitude, 6)}` },
   ];
@@ -164,6 +175,11 @@ export default function ContextMenu({ menu, onClose }) {
     >
       <Box sx={{ px: 1.25, py: 0.75, fontFamily: MONO_FONT, fontVariantNumeric: "tabular-nums", fontSize: TYPE.meta, color: COLORS.muted, userSelect: "text" }}>
         {coordinates}
+        {elevation && (
+          <Box component="span" aria-live="polite" sx={{ display: "block", mt: 0.25, fontFamily: UI_FONT, fontVariantNumeric: "tabular-nums" }}>
+            {elevation}
+          </Box>
+        )}
       </Box>
       {items.map((item) => (
         <Box

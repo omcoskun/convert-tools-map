@@ -131,7 +131,7 @@ test("the comparison sphere has a plausible Earth radius in metres", () => {
 });
 
 test("the basemaps are https styles with structured attributions; the satellite is EOX 2025 imagery with a night side", () => {
-  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap"]);
+  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap", "terrain"]);
   const ids = config.map.basemaps.map((basemap) => basemap.id);
   assert.deepEqual(ids, ["standard", "detailed", "satellite"]);
   assert.ok(ids.includes(config.map.defaultBasemap));
@@ -171,4 +171,26 @@ test("the basemaps are https styles with structured attributions; the satellite 
   }
   // Esri imagery needs a licence.
   assert.doesNotMatch(JSON.stringify(config), /arcgis/i);
+});
+
+test("the terrain is the free Terrarium elevation tiles from their own bucket, with their credit", () => {
+  const { terrain } = config.map;
+  // AWS Open Data: no key, no account, no card. The bucket's own host keeps
+  // the CSP to this one bucket rather than all of s3.amazonaws.com.
+  assert.equal(terrain.tiles, "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png");
+  assert.equal(terrain.encoding, "terrarium");
+  assert.equal(terrain.tileSize, 256);
+  assert.equal(terrain.maxzoom, 15);
+  assert.ok(terrain.attribution.length > 0);
+  for (const { text, href } of terrain.attribution) {
+    assert.equal(typeof text, "string");
+    assert.equal(new URL(href).protocol, "https:", text);
+  }
+  // The tiles' required attribution lists many sources; the credit names the
+  // main ones and links to the whole list.
+  const credit = terrain.attribution.find(({ href }) => href === "https://github.com/tilezen/joerd/blob/master/docs/attribution.md");
+  assert.ok(credit);
+  assert.match(credit.text, /Mapzen/);
+  assert.match(credit.text, /USGS/);
+  assert.match(credit.text, /EU-DEM/);
 });

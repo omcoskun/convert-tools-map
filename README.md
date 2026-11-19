@@ -188,6 +188,13 @@ Değişmeyen kurallar:
   gösterir; ölçüm ve seçim çalışmaya devam eder. OpenFreeMap ücretsizdir ama
   hizmet garantisi (SLA) vermez; gerekirse aynı stil kendi sunucunuzda
   barındırılabilir.
+- Arazi (varsayılan açık, seçim hatırlanır): tepe gölgesi ve 3D arazi. İkisi
+  de `config.json` → `map.terrain` içindeki ücretsiz Terrarium yükseklik
+  karolarını kullanır (AWS Open Data, anahtar ve hesap gerekmez; atfı Mapzen,
+  USGS, Copernicus EU-DEM, NOAA ETOPO1 ve diğerleri). Tepe gölgesi
+  her altlıkta yolların, sınırların ve adların altına çizilir. 3D arazi
+  yalnız küre (3D) görünümünde çalışır; yükseklik abartısı 1×, 1,5× veya 2×
+  seçilir. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
 - Katmanlar (varsayılan kapalı): enlem/boylam ızgarası (aralığı yakınlaştırma
   düzeyini izler) ve MGRS ızgara bölgeleri.
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
@@ -198,7 +205,9 @@ Değişmeyen kurallar:
   Atıflar `config.json`'da yapılandırılmış `{ text, href }` öğeleridir; uzak
   stilden HTML çizilmez.
 - Haritada sağ tık (dokunmatikte uzun basış) noktayı ondalık derece ve MGRS
-  olarak gösterir; her biri tek tıkla kopyalanır. "Konumum" tarayıcının
+  olarak gösterir; her biri tek tıkla kopyalanır. Noktanın yaklaşık
+  yüksekliği de yazılır: 14. düzeydeki Terrarium karosunun tek pikselinden
+  okunur (`src/map/elevation.js`); yalnız gösterimdir, hiçbir hesaba girmez. "Konumum" tarayıcının
   konum özelliğini kullanır ve jeodezik bir doğruluk çemberi çizer; konum
   uygulamanın sunucusuna gönderilmez.
 - Açık, koyu ya da sistem teması üst çubuktan seçilir ve `localStorage`'da

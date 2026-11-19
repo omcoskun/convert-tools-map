@@ -1,12 +1,15 @@
-// The map layers panel: three illustrated basemap cards (a radio group), two
+// The map layers panel: three illustrated basemap cards (a radio group), the
+// terrain switches (hillshade, 3D terrain and its vertical exaggeration), two
 // overlay switches (latitude-longitude grid, MGRS zones) and the "always show
 // scale" switch. The parent positions it and gives focus back to the button
 // that opened it (returnFocusRef) after onClose. Esc and a press outside
-// close it.
-import { useEffect, useRef } from "react";
+// close it. Taller than the map below its top (a phone, whose sheet covers
+// the map's lower edge), it scrolls.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLanguage } from "../context.js";
 import { COLORS, MOTION, PHONE, RADIUS, SHADOW, TYPE, UI_FONT } from "../theme.js";
 import { Box } from "../ui/index.js";
+import { EXAGGERATIONS } from "./terrain.js";
 
 // Thumbnails are CSS gradients only, so there is nothing to load.
 const THUMBNAILS = {
@@ -104,7 +107,76 @@ function SwitchRow({ label, checked, onToggle }) {
   );
 }
 
+// Map left free under the panel when it scrolls: room for the phone sheet's
+// edge and the handle above it.
+const ROOM_BELOW = 28;
+const MIN_HEIGHT = 160;
+
 const sectionTitleSx = { m: 0, mb: 1, fontSize: TYPE.label, fontWeight: 650, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.muted };
+
+/** The vertical exaggeration as a segmented radio group ("1×", "1,5×", "2×"). */
+function ExaggerationChoice({ label, language, value, onChoose }) {
+  const format = new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US");
+  function onKey(event) {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    const backward = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    if (!forward && !backward) return;
+    event.preventDefault();
+    const radios = [...event.currentTarget.querySelectorAll("[role='radio']")];
+    const index = radios.indexOf(document.activeElement);
+    const next = (index + (forward ? 1 : -1) + radios.length) % radios.length;
+    radios[next]?.focus();
+    onChoose(EXAGGERATIONS[next]);
+  }
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1.5, px: 0.5, minHeight: 40, fontSize: TYPE.small, [PHONE]: { minHeight: 44 } }}>
+      <Box component="span" aria-hidden="true" sx={{ color: COLORS.ink2 }}>
+        {label}
+      </Box>
+      <Box
+        role="radiogroup"
+        aria-label={label}
+        onKeyDown={onKey}
+        sx={{ display: "flex", p: "2px", borderRadius: `${RADIUS.control}px`, bgcolor: COLORS.paper2 }}
+      >
+        {EXAGGERATIONS.map((option) => {
+          const checked = option === value;
+          return (
+            <Box
+              key={option}
+              component="button"
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              tabIndex={checked ? 0 : -1}
+              onClick={() => onChoose(option)}
+              sx={{
+                minWidth: 40,
+                height: 28,
+                px: 1,
+                border: 0,
+                borderRadius: `${RADIUS.control - 2}px`,
+                bgcolor: checked ? COLORS.sheet : "transparent",
+                boxShadow: checked ? "0 1px 2px rgba(0, 0, 0, 0.18)" : "none",
+                color: checked ? COLORS.ink : COLORS.muted,
+                font: "inherit",
+                fontSize: TYPE.meta,
+                fontWeight: checked ? 650 : 500,
+                fontVariantNumeric: "tabular-nums",
+                cursor: "pointer",
+                "&:hover": { color: COLORS.ink },
+                "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 0 },
+                [PHONE]: { height: 34 },
+              }}
+            >
+              {`${format.format(option)}×`}
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  );
+}
 
 /**
  * @param {{
@@ -116,9 +188,13 @@ const sectionTitleSx = { m: 0, mb: 1, fontSize: TYPE.label, fontWeight: 650, let
  *   onChooseBasemap: (id: string) => void,
  *   overlays: { graticule: boolean, mgrs: boolean },
  *   onToggleOverlay: (name: "graticule" | "mgrs") => void,
+ *   terrain: { relief: boolean, threeD: boolean, exaggeration: number } | null,
+ *   onToggleTerrain: (name: "relief" | "threeD") => void,
+ *   onChooseExaggeration: (value: number) => void,
  *   scalePinned: boolean,
  *   onToggleScalePinned: () => void,
  * }} props
+ *   terrain is null when config.json has no map.terrain: no terrain section.
  */
 export default function LayerPanel({
   open,
@@ -131,11 +207,31 @@ export default function LayerPanel({
   onToggleOverlay,
   scalePinned,
   onToggleScalePinned,
+  terrain,
+  onToggleTerrain,
+  onChooseExaggeration,
 }) {
-  const { text } = useLanguage();
+  const { text, language } = useLanguage();
   const panelRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [maxHeight, setMaxHeight] = useState(null);
+
+  // The panel's box is placed in the map stage; the panel may reach to
+  // ROOM_BELOW above the stage's bottom.
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    function fit() {
+      const panel = panelRef.current;
+      const box = panel?.offsetParent;
+      const stage = box?.offsetParent;
+      if (!panel || !box || !stage) return;
+      setMaxHeight(Math.max(MIN_HEIGHT, stage.clientHeight - box.offsetTop - panel.offsetTop - ROOM_BELOW));
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -195,6 +291,9 @@ export default function LayerPanel({
       sx={{
         width: 288,
         maxWidth: "calc(100vw - 32px)",
+        maxHeight: maxHeight ?? undefined,
+        overflowY: "auto",
+        overscrollBehavior: "contain",
         boxSizing: "border-box",
         p: 1.5,
         border: `1px solid ${COLORS.rule2}`,
@@ -260,6 +359,18 @@ export default function LayerPanel({
           );
         })}
       </Box>
+      {terrain && (
+        <Box sx={{ mb: 2 }}>
+          <Box component="h2" sx={sectionTitleSx}>
+            {text.mapTerrain}
+          </Box>
+          <SwitchRow label={text.mapHillshade} checked={terrain.relief} onToggle={() => onToggleTerrain("relief")} />
+          <SwitchRow label={text.mapTerrain3d} checked={terrain.threeD} onToggle={() => onToggleTerrain("threeD")} />
+          {terrain.threeD && (
+            <ExaggerationChoice label={text.mapExaggeration} language={language} value={terrain.exaggeration} onChoose={onChooseExaggeration} />
+          )}
+        </Box>
+      )}
       <Box component="h2" sx={sectionTitleSx}>
         {text.mapOverlays}
       </Box>

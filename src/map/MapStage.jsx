@@ -6,6 +6,7 @@ import { BAR_HEIGHT, COLORS, MONO_FONT, MOTION, PHONE, RADIUS, SHADOW, TYPE, UI_
 import { Box, visuallyHidden } from "../ui/index.js";
 import Attribution from "./Attribution.jsx";
 import { TONE_COLORS, findBasemap } from "./basemaps.js";
+import { terrainCredits } from "./terrain.js";
 import ContextMenu from "./ContextMenu.jsx";
 import LayerPanel from "./LayerPanel.jsx";
 import { PIN_SHAPE } from "./map-adapter.js";
@@ -261,6 +262,7 @@ const textButton = {
  * @param {{
  *   basemaps: import("./basemaps.js").Basemap[],
  *   defaultBasemap: string,
+ *   terrain?: import("./terrain.js").Terrain | null,
  *   scene: import("./scene.js").MapScene,
  *   owner: object | null,
  *   handlersRef: { current: import("../shell/workspace-context.js").MapSceneHandlers },
@@ -270,13 +272,14 @@ const textButton = {
  *   onStatusChange: (status: import("../shell/workspace-context.js").MapStatus) => void,
  *   active: boolean,
  * }} props
- *   basemaps, defaultBasemap: config.map. owner: the tool that published
+ *   basemaps, defaultBasemap, terrain: config.map. owner: the tool that published
  *   the scene (see useMapStage). active: false while a page tool hides the
  *   workspace, so Esc is left alone.
  */
 export default function MapStage({
   basemaps,
   defaultBasemap,
+  terrain = null,
   scene,
   owner,
   handlersRef,
@@ -303,7 +306,7 @@ export default function MapStage({
     }),
     [text],
   );
-  const map = useMapStage({ basemaps, defaultBasemap, mode, language, labels, scene, owner, handlersRef, getPadding });
+  const map = useMapStage({ basemaps, defaultBasemap, terrain, mode, language, labels, scene, owner, handlersRef, getPadding });
   const { status, basemapStatus, retry, viewMode, setMode, loaded, location } = map;
   const ready = status === "ready";
   const { picking } = scene;
@@ -355,7 +358,9 @@ export default function MapStage({
 
   const tone = TONES[picking?.tone] ?? TONES.ink;
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
-  const credits = loaded.id ? findBasemap(basemaps, loaded.id)?.attribution ?? [] : [];
+  // The elevation tiles are credited while the relief or the 3D terrain shows.
+  const elevationShown = map.terrain.relief || (map.terrain.threeD && viewMode === "3d");
+  const credits = loaded.id ? terrainCredits(findBasemap(basemaps, loaded.id)?.attribution ?? [], terrain, elevationShown) : [];
   const locationError = {
     mapLocationDenied: text.mapLocationDenied,
     mapLocationTimeout: text.mapLocationTimeout,
@@ -606,6 +611,9 @@ export default function MapStage({
           onChooseBasemap={map.chooseBasemap}
           overlays={map.overlays}
           onToggleOverlay={map.toggleOverlay}
+          terrain={terrain ? map.terrain : null}
+          onToggleTerrain={map.toggleTerrain}
+          onChooseExaggeration={map.chooseExaggeration}
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />

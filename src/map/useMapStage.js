@@ -43,6 +43,18 @@ import { SPACE_SKY, worldMinZoom } from "./map-view.js";
 import { loadMapLibre, webgl2Available } from "./maplibre.js";
 import { createNightLayer } from "./night-layer.js";
 import { mgrsZoneFeatures } from "./mgrs-zones.js";
+import { createElevationReader, loadImageData } from "./elevation.js";
+import {
+  EXAGGERATIONS,
+  HILLSHADE_LAYER,
+  HILLSHADE_SOURCE,
+  TERRAIN_SOURCE,
+  demSource,
+  hillshadeBeforeId,
+  hillshadeLayer,
+  isDemSource,
+  terrainSpec,
+} from "./terrain.js";
 import {
   fitTargets,
   longitudeWithin,
@@ -551,6 +563,7 @@ function installLocation(map) {
  * @param {{
  *   basemaps: import("./basemaps.js").Basemap[],
  *   defaultBasemap: string,
+ *   terrain?: import("./terrain.js").Terrain | null,
  *   mode: "light" | "dark",
  *   language: string,
  *   labels: { mapCanvas: string },
@@ -560,12 +573,15 @@ function installLocation(map) {
  *   getPadding: () => { top: number, right: number, bottom: number, left: number },
  * }} options
  *   basemaps: config.map.basemaps; the choice is remembered (prefs.js).
+ *   terrain: config.map.terrain, the elevation tiles of the hillshade, the 3D
+ *   terrain (globe view only) and the context menu's elevation; the switches
+ *   are remembered.
  *   mode: the interface theme; the standard basemap follows it.
  *   owner identifies the tool that published the scene: when it changes,
  *   the new tool's fitRequest is taken as it is, without fitting.
  *   getPadding is read at each fit, so fits keep clear of the widgets.
  */
-export default function useMapStage({ basemaps, defaultBasemap, mode, language, labels, scene, owner, handlersRef, getPadding }) {
+export default function useMapStage({ basemaps, defaultBasemap, terrain = null, mode, language, labels, scene, owner, handlersRef, getPadding }) {
   const containerRef = useRef(null);
   const cursorRef = useRef(null);
   const compassNodeRef = useRef(null);
@@ -596,6 +612,14 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
   const basemapIds = useMemo(() => basemaps.map((entry) => entry.id), [basemaps]);
   const [basemapId, setBasemapId] = useState(() => readPref("map-basemap", defaultBasemap, basemapIds));
   const [overlays, setOverlays] = useState(() => ({ graticule: readPref("map-graticule", false), mgrs: readPref("map-mgrs", false) }));
+  // Relief and 3D terrain start on: the map is a detailed one.
+  const [terrainView, setTerrainView] = useState(() => ({
+    relief: readPref("map-hillshade", true),
+    threeD: readPref("map-terrain", true),
+    exaggeration: readPref("map-exaggeration", 1, EXAGGERATIONS),
+  }));
+  const elevationReader = useMemo(() => (terrain ? createElevationReader(terrain, { load: loadImageData }) : null), [terrain]);
+  const elevationReaderRef = useRef(elevationReader);
   const source = useMemo(() => basemapSource(findBasemap(basemaps, basemapId), mode), [basemaps, basemapId, mode]);
   const sourceRef = useRef(source);
   const appliedRef = useRef({ key: source.key, mode });
@@ -612,8 +636,9 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
   const [location, setLocation] = useState({ status: "off", errorKey: null });
 
   useEffect(() => {
-    latestRef.current = { language, labels, scene, getPadding, mode, overlays };
+    latestRef.current = { language, labels, scene, getPadding, mode, overlays, terrain, terrainView };
     sourceRef.current = source;
+    elevationReaderRef.current = elevationReader;
   });
 
   const transformStyle = useCallback((previous, next) => {
@@ -665,6 +690,31 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
     if (map) map.easeTo({ zoom: map.getZoom() + delta, duration: animation(250) });
   }, []);
 
+  // ---- Relief and 3D terrain: put back after every style load -------------
+  // Only on the remote basemap (the offline grid fetches nothing). The 3D
+  // terrain only on the globe view: the flat map is never tilted.
+  const syncTerrain = useCallback(() => {
+    const map = mapRef.current;
+    const latest = latestRef.current;
+    const config = latest?.terrain;
+    if (!map || !config || !basemapRef.current.remote || !map.getLayer(CASING_LAYER)) return;
+    const { relief, threeD, exaggeration } = latest.terrainView;
+    const wantTerrain = threeD && modeRef.current === "3d";
+    if (relief && !map.getSource(HILLSHADE_SOURCE)) map.addSource(HILLSHADE_SOURCE, demSource(config));
+    if (wantTerrain && !map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, demSource(config));
+    if (relief && !map.getLayer(HILLSHADE_LAYER)) {
+      map.addLayer(hillshadeLayer(sourceRef.current.tone), hillshadeBeforeId(map.getStyle().layers));
+    } else if (!relief && map.getLayer(HILLSHADE_LAYER)) {
+      map.removeLayer(HILLSHADE_LAYER);
+    }
+    const current = map.getTerrain();
+    if (wantTerrain) {
+      if (current?.source !== TERRAIN_SOURCE || current?.exaggeration !== exaggeration) map.setTerrain(terrainSpec(exaggeration));
+    } else if (current) {
+      map.setTerrain(null);
+    }
+  }, []);
+
   const setMode = useCallback((next) => {
     const map = mapRef.current;
     if (!map || modeRef.current === next) return;
@@ -675,6 +725,7 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
     map.setProjection({ type: next === "3d" ? "globe" : "mercator" });
     map.setSky(next === "3d" ? SPACE_SKY : undefined);
     map.setMaxPitch(next === "3d" ? 60 : 0);
+    syncTerrain();
     if (next === "3d") {
       map.dragRotate.enable();
       map.touchZoomRotate.enableRotation();
@@ -690,7 +741,7 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
     map.jumpTo({ center: [center.lng, next === "2d" ? Math.max(-MERCATOR_LATITUDE_LIMIT, Math.min(MERCATOR_LATITUDE_LIMIT, center.lat)) : center.lat] });
     map.easeTo({ pitch: next === "3d" && map.getZoom() >= 5 ? 45 : 0, bearing: 0, duration: animation(500) });
     syncViewRef.current?.();
-  }, []);
+  }, [syncTerrain]);
 
   const resetNorth = useCallback(() => {
     mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: animation(400) });
@@ -752,6 +803,22 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
     writePref("map-graticule", overlays.graticule);
     writePref("map-mgrs", overlays.mgrs);
   }, [overlays]);
+
+  // Turning the 3D terrain on shows it: the globe view, tilted once zoomed in.
+  const toggleTerrain = useCallback(
+    (name) => {
+      const turningOn = name === "threeD" && !latestRef.current?.terrainView.threeD;
+      setTerrainView((current) => ({ ...current, [name]: !current[name] }));
+      const map = mapRef.current;
+      if (!turningOn || !map) return;
+      if (modeRef.current === "2d") setMode("3d");
+      else if (map.getZoom() >= 5 && map.getPitch() < 20) map.easeTo({ pitch: 50, duration: animation(500) });
+    },
+    [setMode],
+  );
+  const chooseExaggeration = useCallback((value) => {
+    setTerrainView((current) => ({ ...current, exaggeration: EXAGGERATIONS.includes(value) ? value : 1 }));
+  }, []);
 
   const closeContextMenu = useCallback(() => {
     menuOpenRef.current = false;
@@ -1107,6 +1174,7 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
         }
         gridRef.current = null;
         syncOverlays();
+        syncTerrain();
         drawLocation();
         syncView();
         setStatus("ready");
@@ -1130,7 +1198,7 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
         if (disposed || !basemapState.remote || !basemapState.styleLoaded) return;
         // The night side's tiles are drawn here, not fetched: not a sign of
         // the basemap's health.
-        if (event?.sourceId === NIGHT_SOURCE) return;
+        if (event?.sourceId === NIGHT_SOURCE || isDemSource(event?.sourceId)) return;
         const sample = tileSample(event);
         if (!sample) return;
         const now = performance.now();
@@ -1168,7 +1236,15 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
         const lngLat = lngLatOnMap(map, { x, y });
         if (!lngLat) return;
         menuOpenRef.current = true;
-        setContextMenu({ x, y, latitude: Math.max(-90, Math.min(90, lngLat.lat)), longitude: wrapLongitude(lngLat.lng) });
+        const latitude = Math.max(-90, Math.min(90, lngLat.lat));
+        const longitude = wrapLongitude(lngLat.lng);
+        const readElevation = elevationReaderRef.current;
+        setContextMenu({ x, y, latitude, longitude, elevation: readElevation ? undefined : null });
+        // The elevation arrives when its tile has loaded, for this point only.
+        readElevation?.(latitude, longitude).then((elevation) => {
+          if (disposed) return;
+          setContextMenu((current) => (current && current.latitude === latitude && current.longitude === longitude ? { ...current, elevation } : current));
+        });
       };
       let pendingMenu = null;
       map.on("contextmenu", (event) => {
@@ -1294,7 +1370,7 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
       updateGridRef.current = null;
       gridRef.current = null;
     };
-  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, drawLocation]);
+  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, syncTerrain, drawLocation]);
 
   // ---- Basemap and theme: another style when the choice needs one --------
   useEffect(() => {
@@ -1310,6 +1386,14 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
   useEffect(() => {
     if (styleRevision > 0) syncOverlays();
   }, [overlays, styleRevision, syncOverlays]);
+
+  // ---- Relief and 3D terrain -------------------------------------------------
+  useEffect(() => {
+    writePref("map-hillshade", terrainView.relief);
+    writePref("map-terrain", terrainView.threeD);
+    writePref("map-exaggeration", terrainView.exaggeration);
+    if (styleRevision > 0) syncTerrain();
+  }, [terrainView, styleRevision, syncTerrain]);
 
   // ---- Pins: created, updated and removed by id -------------------------
   const createPinEntry = useCallback(
@@ -1512,6 +1596,9 @@ export default function useMapStage({ basemaps, defaultBasemap, mode, language, 
     chooseBasemap,
     overlays,
     toggleOverlay,
+    terrain: terrainView,
+    toggleTerrain,
+    chooseExaggeration,
     loaded,
     styleRevision,
     subscribeView,

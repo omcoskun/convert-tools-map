@@ -79,7 +79,12 @@ test("production pages carry the Content-Security-Policy meta tag, development p
   assert.match(CONTENT_SECURITY_POLICY, /script-src 'self'(;|$)/);
   assert.doesNotMatch(CONTENT_SECURITY_POLICY, /unsafe-eval/);
   // No image host: tiles and imagery are fetched, then decoded from blobs.
-  assert.deepEqual(MAP_ORIGINS, ["https://gibs.earthdata.nasa.gov", "https://tiles.maps.eox.at", "https://tiles.openfreemap.org"]);
+  assert.deepEqual(MAP_ORIGINS, [
+    "https://elevation-tiles-prod.s3.amazonaws.com",
+    "https://gibs.earthdata.nasa.gov",
+    "https://tiles.maps.eox.at",
+    "https://tiles.openfreemap.org",
+  ]);
   // Raster tiles arrive as images, so the same origins are allowed there.
   assert.match(CONTENT_SECURITY_POLICY, new RegExp(`img-src 'self' data: blob: ${MAP_ORIGINS.join(" ")}(;|$)`));
   assert.match(CONTENT_SECURITY_POLICY, new RegExp(`connect-src 'self' ${MAP_ORIGINS.join(" ")}(;|$)`));
@@ -121,4 +126,13 @@ test("Babel compiles only src/ for the MUI v5 browser baseline", () => {
   assert.deepEqual(options.presets[0], ["@babel/preset-env", { targets: BROWSER_TARGETS, bugfixes: true }]);
   assert.deepEqual(options.presets[1], ["@babel/preset-react", { runtime: "automatic", development: false }]);
   assert.deepEqual(BROWSER_TARGETS, { chrome: "90", edge: "91", firefox: "78", safari: "14", ios: "12.5" });
+});
+
+test("the map origins include the terrain tiles' origin but no credit link", () => {
+  const map = {
+    basemaps: [{ id: "a", style: "https://style.example/a.json", attribution: [{ text: "A", href: "https://credit.example/a" }] }],
+    terrain: { tiles: "https://dem.example/{z}/{x}/{y}.png", attribution: [{ text: "DEM", href: "https://credit.example/dem" }] },
+  };
+  assert.deepEqual(mapOrigins(map), ["https://dem.example", "https://style.example"]);
+  assert.deepEqual(mapOrigins({ basemaps: map.basemaps }), ["https://style.example"]);
 });

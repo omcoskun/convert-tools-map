@@ -157,6 +157,15 @@
           { "text": "© OpenStreetMap", "href": "https://www.openstreetmap.org/copyright" }
         ]
       }
-    ]
+    ],
+    "terrain": {
+      "tiles": "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png",
+      "encoding": "terrarium",
+      "tileSize": 256,
+      "maxzoom": 15,
+      "attribution": [
+        { "text": "Terrain Tiles: Mapzen, USGS (SRTM, GMTED2010, 3DEP), Copernicus EU-DEM, NOAA ETOPO1 and others", "href": "https://github.com/tilezen/joerd/blob/master/docs/attribution.md" }
+      ]
+    }
   }
 }

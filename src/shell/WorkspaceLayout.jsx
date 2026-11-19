@@ -229,6 +229,7 @@ export default function WorkspaceLayout({ hidden = false, children }) {
           <MapStage
             basemaps={mapSettings.basemaps}
             defaultBasemap={mapSettings.defaultBasemap}
+            terrain={mapSettings.terrain ?? null}
             scene={published.scene}
             owner={published.owner}
             handlersRef={handlersRef}

@@ -63,12 +63,13 @@ function urlsIn(value) {
 
 /**
  * Origins the map fetches from: those of every basemap style and raster
- * tile template in public/config.json (map.basemaps). A style's tiles,
+ * tile template in public/config.json (map.basemaps) and of the elevation
+ * tiles (map.terrain). A style's tiles,
  * glyphs and sprites come from its own origin. Attribution links are not
  * fetched and are left out.
  */
 export function mapOrigins(map) {
-  const fetched = (map?.basemaps ?? []).map((basemap) => ({ ...basemap, attribution: undefined }));
+  const fetched = [...(map?.basemaps ?? []), ...(map?.terrain ? [map.terrain] : [])].map((entry) => ({ ...entry, attribution: undefined }));
   return [...new Set(urlsIn(fetched).map((url) => new URL(url.replace(/[{}]/g, "")).origin))].sort();
 }
 

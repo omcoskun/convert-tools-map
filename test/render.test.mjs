@@ -551,3 +551,81 @@ test("the scale bar is named by its reading and its action, not by a fixed label
   // The drawn ticks repeat the reading; they stay out of the name.
   assert.match(html, /<span[^>]*aria-hidden="true"[^>]*>[\s\S]*>0<\/span>/);
 });
+
+/** LayerPanel, open, in Turkish, with these terrain props. */
+async function layerPanel(terrain) {
+  const { default: LayerPanel } = await import("../src/map/LayerPanel.jsx");
+  const { LanguageContext } = await import("../src/context.js");
+  return markup(
+    renderToString(
+      createElement(
+        LanguageContext.Provider,
+        { value: { language: "tr", ...lang.tr } },
+        createElement(LayerPanel, {
+          open: true,
+          onClose() {},
+          basemaps: config.map.basemaps,
+          basemapId: "standard",
+          onChooseBasemap() {},
+          overlays: { graticule: false, mgrs: false },
+          onToggleOverlay() {},
+          scalePinned: false,
+          onToggleScalePinned() {},
+          terrain,
+          onToggleTerrain() {},
+          onChooseExaggeration() {},
+        }),
+      ),
+    ),
+  );
+}
+
+/** aria-checked of the switch labelled `label`, or undefined. */
+function switchState(html, label) {
+  return html.match(new RegExp(`role="switch" aria-checked="(true|false)"[^>]*><span>${label}</span>`))?.[1];
+}
+
+test("the layers panel has a terrain section: hillshade, 3D terrain and, while it is on, the exaggeration", async () => {
+  const words = lang.tr.text;
+  const on = await layerPanel({ relief: true, threeD: true, exaggeration: 1.5 });
+  assert.ok(visibleText(on).includes(words.mapTerrain));
+  assert.equal(switchState(on, words.mapHillshade), "true");
+  assert.equal(switchState(on, words.mapTerrain3d), "true");
+  const group = element(on, `aria-label="${words.mapExaggeration}"`);
+  assert.match(group, /role="radiogroup"/);
+  assert.deepEqual(visibleText(group).split(" "), ["1×", "1,5×", "2×"]);
+  assert.match(group, /role="radio" aria-checked="true"[^>]*>1,5×</);
+
+  const off = await layerPanel({ relief: false, threeD: false, exaggeration: 1 });
+  assert.equal(switchState(off, words.mapHillshade), "false");
+  assert.equal(switchState(off, words.mapTerrain3d), "false");
+  assert.equal(element(off, `aria-label="${words.mapExaggeration}"`), null);
+
+  // A config without terrain shows no terrain section.
+  const none = await layerPanel(null);
+  assert.ok(!visibleText(none).includes(words.mapTerrain3d));
+});
+
+/** ContextMenu for Ankara, in `language`, with this elevation state. */
+async function contextMenuText(elevation, language = "tr") {
+  const { default: ContextMenu } = await import("../src/map/ContextMenu.jsx");
+  const { LanguageContext } = await import("../src/context.js");
+  return visibleText(
+    renderToString(
+      createElement(
+        LanguageContext.Provider,
+        { value: { language, ...lang[language] } },
+        createElement(ContextMenu, { menu: { x: 10, y: 10, latitude: 39.933365, longitude: 32.859742, elevation }, onClose() {} }),
+      ),
+    ),
+  );
+}
+
+test("the context menu shows the point's approximate elevation once it is read, and says nothing when it cannot be", async () => {
+  const tr = lang.tr.text.mapElevation;
+  assert.ok((await contextMenuText(1234.4)).includes(`${tr} ≈ 1.234 m`));
+  assert.ok((await contextMenuText(1234.4, "en")).includes(`${lang.en.text.mapElevation} ≈ 1,234 m`));
+  assert.ok((await contextMenuText(-12.6)).includes(`${tr} ≈ -13 m`));
+  assert.ok((await contextMenuText(undefined)).includes(`${tr} …`));
+  assert.ok(!(await contextMenuText(null)).includes(tr));
+});
