@@ -198,8 +198,11 @@ Değişmeyen kurallar:
   seçilir. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
 - Katmanlar: 3D binalar (varsayılan açık; küre görünümünde, yakınlaştırma
   14'ten itibaren, OpenFreeMap karolarındaki bina yüksekliklerinden),
-  enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler) ve MGRS ızgara
-  bölgeleri (bu ikisi varsayılan kapalı).
+  enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler), MGRS ızgara
+  bölgeleri ve son 7 günün depremleri (bu üçü varsayılan kapalı). Depremler
+  USGS'nin ücretsiz akışından gelir (M2.5 ve üstü, anahtar gerekmez): uzakta
+  büyüklüğe göre ısı haritası, yakınlaştırınca büyüklüğe göre boyanmış
+  noktalar.
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
   sol üstte): yakınlaşırken görünür, sonra silinir; tıklayınca
   metrik, deniz mili ve imperial arasında döner; katman panelinden sabitlenebilir.

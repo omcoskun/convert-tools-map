@@ -131,7 +131,7 @@ test("the comparison sphere has a plausible Earth radius in metres", () => {
 });
 
 test("the basemaps are https styles with structured attributions; the satellite is EOX 2025 imagery with a night side", () => {
-  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap", "terrain"]);
+  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap", "earthquakes", "terrain"]);
   const ids = config.map.basemaps.map((basemap) => basemap.id);
   assert.deepEqual(ids, ["standard", "detailed", "satellite"]);
   assert.ok(ids.includes(config.map.defaultBasemap));
@@ -193,4 +193,17 @@ test("the terrain is the free Terrarium elevation tiles from their own bucket, w
   assert.match(credit.text, /Mapzen/);
   assert.match(credit.text, /USGS/);
   assert.match(credit.text, /EU-DEM/);
+});
+
+test("the earthquakes are the USGS feed of the past week's M2.5+ events, with its credit", () => {
+  const { earthquakes } = config.map;
+  // USGS data is public domain; the feed needs no key and allows any origin.
+  assert.equal(earthquakes.data, "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson");
+  assert.deepEqual(Object.keys(earthquakes).sort(), ["attribution", "data"]);
+  assert.ok(earthquakes.attribution.length > 0);
+  for (const { text, href } of earthquakes.attribution) {
+    assert.equal(typeof text, "string");
+    assert.equal(new URL(href).protocol, "https:", text);
+  }
+  assert.ok(earthquakes.attribution.some(({ text }) => /USGS/.test(text)));
 });

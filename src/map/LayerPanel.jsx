@@ -193,10 +193,13 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
  *   onChooseExaggeration: (value: number) => void,
  *   buildings: boolean,
  *   onToggleBuildings: () => void,
+ *   earthquakes: { on: boolean } | null,
+ *   onToggleEarthquakes: () => void,
  *   scalePinned: boolean,
  *   onToggleScalePinned: () => void,
  * }} props
  *   terrain is null when config.json has no map.terrain: no terrain section.
+ *   earthquakes is null when config.json has no map.earthquakes: no earthquakes switch.
  */
 export default function LayerPanel({
   open,
@@ -214,6 +217,8 @@ export default function LayerPanel({
   onChooseExaggeration,
   buildings,
   onToggleBuildings,
+  earthquakes,
+  onToggleEarthquakes,
 }) {
   const { text, language } = useLanguage();
   const panelRef = useRef(null);
@@ -382,6 +387,7 @@ export default function LayerPanel({
       <SwitchRow label={text.mapBuildings3d} checked={buildings} onToggle={onToggleBuildings} />
       <SwitchRow label={text.mapGraticule} checked={overlays.graticule} onToggle={() => onToggleOverlay("graticule")} />
       <SwitchRow label={text.mapMgrsZones} checked={overlays.mgrs} onToggle={() => onToggleOverlay("mgrs")} />
+      {earthquakes && <SwitchRow label={text.mapEarthquakes} checked={earthquakes.on} onToggle={onToggleEarthquakes} />}
       <SwitchRow label={text.mapScaleAlways} checked={scalePinned} onToggle={onToggleScalePinned} />
     </Box>
   );

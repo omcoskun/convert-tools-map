@@ -576,6 +576,8 @@ async function layerPanel(terrain, extra = {}) {
           onChooseExaggeration() {},
           buildings: false,
           onToggleBuildings() {},
+          earthquakes: null,
+          onToggleEarthquakes() {},
           ...extra,
         }),
       ),
@@ -633,6 +635,16 @@ test("the layers section starts with a 3D buildings switch", async () => {
   const buildings = text.indexOf(words.mapBuildings3d);
   const grid = text.indexOf(words.mapGraticule);
   assert.ok(section >= 0 && section < buildings && buildings < grid, `${section} ${buildings} ${grid}`);
+});
+
+test("the layers section has an earthquakes switch when config.json has a feed", async () => {
+  const words = lang.tr.text;
+  const on = await layerPanel(null, { earthquakes: { on: true } });
+  assert.equal(switchState(on, words.mapEarthquakes), "true");
+  const off = await layerPanel(null, { earthquakes: { on: false } });
+  assert.equal(switchState(off, words.mapEarthquakes), "false");
+  const none = await layerPanel(null, { earthquakes: null });
+  assert.ok(!visibleText(none).includes(words.mapEarthquakes));
 });
 
 /** ContextMenu for Ankara, in `language`, with this elevation state. */

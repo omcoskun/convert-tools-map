@@ -230,6 +230,7 @@ export default function WorkspaceLayout({ hidden = false, children }) {
             basemaps={mapSettings.basemaps}
             defaultBasemap={mapSettings.defaultBasemap}
             terrain={mapSettings.terrain ?? null}
+            earthquakes={mapSettings.earthquakes ?? null}
             scene={published.scene}
             owner={published.owner}
             handlersRef={handlersRef}

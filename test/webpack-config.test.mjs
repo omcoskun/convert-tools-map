@@ -80,6 +80,7 @@ test("production pages carry the Content-Security-Policy meta tag, development p
   assert.doesNotMatch(CONTENT_SECURITY_POLICY, /unsafe-eval/);
   // No image host: tiles and imagery are fetched, then decoded from blobs.
   assert.deepEqual(MAP_ORIGINS, [
+    "https://earthquake.usgs.gov",
     "https://elevation-tiles-prod.s3.amazonaws.com",
     "https://gibs.earthdata.nasa.gov",
     "https://tiles.maps.eox.at",
@@ -135,4 +136,12 @@ test("the map origins include the terrain tiles' origin but no credit link", () 
   };
   assert.deepEqual(mapOrigins(map), ["https://dem.example", "https://style.example"]);
   assert.deepEqual(mapOrigins({ basemaps: map.basemaps }), ["https://style.example"]);
+});
+
+test("the map origins include the earthquake feed's origin but no credit link", () => {
+  const map = {
+    basemaps: [{ id: "a", style: "https://style.example/a.json", attribution: [{ text: "A", href: "https://credit.example/a" }] }],
+    earthquakes: { data: "https://quakes.example/feed/week.geojson", attribution: [{ text: "Q", href: "https://credit.example/q" }] },
+  };
+  assert.deepEqual(mapOrigins(map), ["https://quakes.example", "https://style.example"]);
 });
