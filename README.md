@@ -10,10 +10,10 @@ Node.js 22.15 veya üstü ve npm gerekir.
 
 Kütüphane GitHub Packages'tan gelir ve kurulum bir token ister. GitHub'da
 `read:packages` yetkili bir classic kişisel erişim token'ı (PAT) oluşturun
-ve `~/.npmrc` dosyanıza şu satırı ekleyin:
+ve `~/.npmrc` dosyanıza şu satırı, `ghp_X…` yerine kendi token'ınızı işaretsiz yazarak ekleyin:
 
 ```text
-//npm.pkg.github.com/:_authToken=<token>
+//npm.pkg.github.com/:_authToken=ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 Repodaki `.npmrc`, `@omcoskun` paketlerinin nereden geleceğini söyler; token

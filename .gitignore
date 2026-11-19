@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output
+/build/
+*.tgz
+
+# testing
+/coverage
+
+# misc
+.DS_Store
+.idea/
+*.pem
+npm-debug.log*
+.claude/
+
+# env files
+.env*
