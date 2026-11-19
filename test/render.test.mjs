@@ -552,8 +552,8 @@ test("the scale bar is named by its reading and its action, not by a fixed label
   assert.match(html, /<span[^>]*aria-hidden="true"[^>]*>[\s\S]*>0<\/span>/);
 });
 
-/** LayerPanel, open, in Turkish, with these terrain props. */
-async function layerPanel(terrain) {
+/** LayerPanel, open, in Turkish, with these terrain props and any other props in extra. */
+async function layerPanel(terrain, extra = {}) {
   const { default: LayerPanel } = await import("../src/map/LayerPanel.jsx");
   const { LanguageContext } = await import("../src/context.js");
   return markup(
@@ -574,6 +574,9 @@ async function layerPanel(terrain) {
           terrain,
           onToggleTerrain() {},
           onChooseExaggeration() {},
+          buildings: false,
+          onToggleBuildings() {},
+          ...extra,
         }),
       ),
     ),
@@ -617,6 +620,19 @@ test("the terrain section has an elevation colours switch between the hillshade 
   const colours = text.indexOf(words.mapColorRelief);
   const threeD = text.indexOf(words.mapTerrain3d);
   assert.ok(hillshade >= 0 && hillshade < colours && colours < threeD, `${hillshade} ${colours} ${threeD}`);
+});
+
+test("the layers section starts with a 3D buildings switch", async () => {
+  const words = lang.tr.text;
+  const on = await layerPanel(null, { buildings: true });
+  assert.equal(switchState(on, words.mapBuildings3d), "true");
+  const off = await layerPanel(null, { buildings: false });
+  assert.equal(switchState(off, words.mapBuildings3d), "false");
+  const text = visibleText(on);
+  const section = text.indexOf(words.mapOverlays);
+  const buildings = text.indexOf(words.mapBuildings3d);
+  const grid = text.indexOf(words.mapGraticule);
+  assert.ok(section >= 0 && section < buildings && buildings < grid, `${section} ${buildings} ${grid}`);
 });
 
 /** ContextMenu for Ankara, in `language`, with this elevation state. */

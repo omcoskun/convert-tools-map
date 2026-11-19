@@ -614,6 +614,8 @@ export default function MapStage({
           terrain={terrain ? map.terrain : null}
           onToggleTerrain={map.toggleTerrain}
           onChooseExaggeration={map.chooseExaggeration}
+          buildings={map.buildings}
+          onToggleBuildings={map.toggleBuildings}
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />

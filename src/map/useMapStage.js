@@ -15,6 +15,15 @@ import {
   tilesFailing,
 } from "./basemaps.js";
 import { graticuleCovers, graticuleFeatures, graticuleInterval } from "./graticule.js";
+import {
+  BUILDINGS_LAYER,
+  BUILDINGS_MINZOOM,
+  buildingSource,
+  buildingsBeforeId,
+  buildingsLayer,
+  flatBuildingLayers,
+  styleBuildingExtrusions,
+} from "./buildings.js";
 import { accuracyRing, locationErrorKey } from "./location.js";
 import {
   GLOBE_MAX_ZOOM,
@@ -622,6 +631,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     threeD: readPref("map-terrain", true),
     exaggeration: readPref("map-exaggeration", 1, EXAGGERATIONS),
   }));
+  const [buildings, setBuildings] = useState(() => readPref("map-buildings", true));
   const elevationReader = useMemo(() => (terrain ? createElevationReader(terrain, { load: loadImageData }) : null), [terrain]);
   const elevationReaderRef = useRef(elevationReader);
   const source = useMemo(() => basemapSource(findBasemap(basemaps, basemapId), mode), [basemaps, basemapId, mode]);
@@ -640,7 +650,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const [location, setLocation] = useState({ status: "off", errorKey: null });
 
   useEffect(() => {
-    latestRef.current = { language, labels, scene, getPadding, mode, overlays, terrain, terrainView };
+    latestRef.current = { language, labels, scene, getPadding, mode, overlays, terrain, terrainView, buildings };
     sourceRef.current = source;
     elevationReaderRef.current = elevationReader;
   });
@@ -725,6 +735,24 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     }
   }, []);
 
+  // ---- 3D buildings: the app's extrusion, in the 3D view only ------------
+  // The style's own extrusions (the detailed map has one) are removed so the
+  // switch alone decides, and its flat footprints are kept at every zoom.
+  const syncBuildings = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !basemapRef.current.remote || !map.getLayer(CASING_LAYER)) return;
+    const style = map.getStyle();
+    for (const id of styleBuildingExtrusions(style.layers)) map.removeLayer(id);
+    for (const { id, minzoom } of flatBuildingLayers(style.layers)) map.setLayerZoomRange(id, minzoom, 24);
+    const want = Boolean(latestRef.current?.buildings) && modeRef.current === "3d";
+    const source = buildingSource(style);
+    if (want && source && !map.getLayer(BUILDINGS_LAYER)) {
+      map.addLayer(buildingsLayer(sourceRef.current.tone, source), buildingsBeforeId(map.getStyle().layers));
+    } else if (!want && map.getLayer(BUILDINGS_LAYER)) {
+      map.removeLayer(BUILDINGS_LAYER);
+    }
+  }, []);
+
   const setMode = useCallback((next) => {
     const map = mapRef.current;
     if (!map || modeRef.current === next) return;
@@ -736,6 +764,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     map.setSky(next === "3d" ? SPACE_SKY : undefined);
     map.setMaxPitch(next === "3d" ? 60 : 0);
     syncTerrain();
+    syncBuildings();
     if (next === "3d") {
       map.dragRotate.enable();
       map.touchZoomRotate.enableRotation();
@@ -751,7 +780,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     map.jumpTo({ center: [center.lng, next === "2d" ? Math.max(-MERCATOR_LATITUDE_LIMIT, Math.min(MERCATOR_LATITUDE_LIMIT, center.lat)) : center.lat] });
     map.easeTo({ pitch: next === "3d" && map.getZoom() >= 5 ? 45 : 0, bearing: 0, duration: animation(500) });
     syncViewRef.current?.();
-  }, [syncTerrain]);
+  }, [syncTerrain, syncBuildings]);
 
   const resetNorth = useCallback(() => {
     mapRef.current?.easeTo({ bearing: 0, pitch: 0, duration: animation(400) });
@@ -829,6 +858,16 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const chooseExaggeration = useCallback((value) => {
     setTerrainView((current) => ({ ...current, exaggeration: EXAGGERATIONS.includes(value) ? value : 1 }));
   }, []);
+
+  // Turning the buildings on shows them: the globe view, tilted once zoomed in close.
+  const toggleBuildings = useCallback(() => {
+    const turningOn = !latestRef.current?.buildings;
+    setBuildings((current) => !current);
+    const map = mapRef.current;
+    if (!turningOn || !map) return;
+    if (modeRef.current === "2d") setMode("3d");
+    else if (map.getZoom() >= BUILDINGS_MINZOOM && map.getPitch() < 20) map.easeTo({ pitch: 50, duration: animation(500) });
+  }, [setMode]);
 
   const closeContextMenu = useCallback(() => {
     menuOpenRef.current = false;
@@ -1185,6 +1224,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         gridRef.current = null;
         syncOverlays();
         syncTerrain();
+        syncBuildings();
         drawLocation();
         syncView();
         setStatus("ready");
@@ -1380,7 +1420,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       updateGridRef.current = null;
       gridRef.current = null;
     };
-  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, syncTerrain, drawLocation]);
+  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, syncTerrain, syncBuildings, drawLocation]);
 
   // ---- Basemap and theme: another style when the choice needs one --------
   useEffect(() => {
@@ -1405,6 +1445,12 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     writePref("map-exaggeration", terrainView.exaggeration);
     if (styleRevision > 0) syncTerrain();
   }, [terrainView, styleRevision, syncTerrain]);
+
+  // ---- 3D buildings ---------------------------------------------------------
+  useEffect(() => {
+    writePref("map-buildings", buildings);
+    if (styleRevision > 0) syncBuildings();
+  }, [buildings, styleRevision, syncBuildings]);
 
   // ---- Pins: created, updated and removed by id -------------------------
   const createPinEntry = useCallback(
@@ -1610,6 +1656,8 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     terrain: terrainView,
     toggleTerrain,
     chooseExaggeration,
+    buildings,
+    toggleBuildings,
     loaded,
     styleRevision,
     subscribeView,
