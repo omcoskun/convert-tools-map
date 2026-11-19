@@ -7,6 +7,8 @@ import { readJson } from "./support/files.mjs";
 import {
   CONTINENT_LAYER,
   CONTINENT_SOURCE,
+  DETAIL_LAYER,
+  DETAIL_SOURCE,
   SATELLITE_FALLBACK_SOURCE,
   SATELLITE_SOURCE,
   TONE_COLORS,
@@ -14,6 +16,7 @@ import {
   continentFeatures,
   findBasemap,
   firstLayerAboveImagery,
+  isDetailRefusal,
   pruneTileSamples,
   satelliteStyle,
   tileSample,
@@ -229,6 +232,47 @@ test("a fallback imagery source sits under the sharp imagery", () => {
   const style = satelliteStyle(VECTOR_STYLE, raster);
   assert.deepEqual(style.layers.map((layer) => layer.id).slice(0, 3), ["background", "convert-satellite-fallback", SATELLITE_SOURCE]);
   assert.deepEqual(style.sources[SATELLITE_FALLBACK_SOURCE], { type: "raster", tiles: [raster.fallback.tiles], tileSize: 256, maxzoom: 8 });
+});
+
+const DETAIL = Object.freeze({ url: "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key={key}", tileSize: 512, minzoom: 13 });
+
+test("MapTiler's close-up imagery is drawn above EOX from its first zoom, and only with a key", () => {
+  const raster = { tiles: "https://imagery.example/{z}/{y}/{x}.jpg", maxzoom: 14, detail: DETAIL };
+  for (const detailKey of [undefined, null, ""]) {
+    const keyless = satelliteStyle(VECTOR_STYLE, raster, { detailKey });
+    assert.equal(keyless.sources[DETAIL_SOURCE], undefined, String(detailKey));
+    assert.ok(!keyless.layers.some((layer) => layer.id === DETAIL_LAYER), String(detailKey));
+  }
+  const keyed = satelliteStyle(VECTOR_STYLE, raster, { detailKey: "Abc_123-x" });
+  // MapTiler's TileJSON names the tiles and their zooms; the key rides in its query.
+  assert.deepEqual(keyed.sources[DETAIL_SOURCE], {
+    type: "raster",
+    url: "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key=Abc_123-x",
+    tileSize: 512,
+  });
+  assert.deepEqual(keyed.layers.map((layer) => layer.id).slice(0, 3), ["background", SATELLITE_SOURCE, DETAIL_LAYER]);
+  const layer = keyed.layers[2];
+  assert.equal(layer.source, DETAIL_SOURCE);
+  assert.equal(layer.type, "raster");
+  assert.equal(layer.minzoom, 13);
+  // The night side still goes above all imagery, under boundaries and names.
+  assert.equal(firstLayerAboveImagery(keyed.layers), "boundary_2");
+  assert.equal(satelliteStyle(VECTOR_STYLE, raster, { detailKey: "a b&c" }).sources[DETAIL_SOURCE].url.split("?")[1], "key=a%20b%26c");
+  // Without a detail entry a key changes nothing.
+  const plain = { tiles: raster.tiles, maxzoom: 14 };
+  assert.deepEqual(satelliteStyle(VECTOR_STYLE, plain, { detailKey: "abc" }), satelliteStyle(VECTOR_STYLE, plain));
+});
+
+test("only MapTiler refusing the key or the quota turns the close-up imagery off", () => {
+  for (const status of [401, 403, 429]) {
+    assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: { status } }), true, String(status));
+  }
+  // A missing tile or a network hiccup is not a refusal.
+  assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: { status: 404 } }), false);
+  assert.equal(isDetailRefusal({ sourceId: DETAIL_SOURCE, error: new Error("Failed to fetch") }), false);
+  assert.equal(isDetailRefusal({ sourceId: SATELLITE_SOURCE, error: { status: 403 } }), false);
+  assert.equal(isDetailRefusal({ error: { status: 403 } }), false);
+  assert.equal(isDetailRefusal(undefined), false);
 });
 
 test("tile events become samples; cancelled requests are ignored", () => {

@@ -6,6 +6,7 @@ import { BAR_HEIGHT, COLORS, MONO_FONT, MOTION, PHONE, RADIUS, SHADOW, TYPE, UI_
 import { Box, visuallyHidden } from "../ui/index.js";
 import Attribution from "./Attribution.jsx";
 import { TONE_COLORS, findBasemap } from "./basemaps.js";
+import { basemapCredits, creditsAt } from "./credits.js";
 import { terrainCredits } from "./terrain.js";
 import ContextMenu from "./ContextMenu.jsx";
 import LayerPanel from "./LayerPanel.jsx";
@@ -362,11 +363,20 @@ export default function MapStage({
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
   // The elevation tiles are credited while the relief, the colours or the 3D terrain shows.
   const elevationShown = map.terrain.relief || map.terrain.colorRelief || (map.terrain.threeD && viewMode === "3d");
-  // The basemap's credits, the elevation tiles' while they show, and the
-  // earthquake feed while its layer shows.
-  const credits = loaded.id
-    ? terrainCredits(terrainCredits(findBasemap(basemaps, loaded.id)?.attribution ?? [], terrain, elevationShown), earthquakes, map.earthquakes.on)
+  // The basemap's credits (with MapTiler's while its close-up imagery is
+  // used), the elevation tiles' while they show and the earthquake feed's
+  // while its layer shows; of these, only the ones drawn at this zoom.
+  const loadedBasemap = loaded.id ? findBasemap(basemaps, loaded.id) : undefined;
+  const detail = map.detailImagery ? loadedBasemap?.raster?.detail : undefined;
+  const zoom = map.zoom ?? 0;
+  const credits = loadedBasemap
+    ? creditsAt(
+        terrainCredits(terrainCredits(basemapCredits(loadedBasemap, { detail: Boolean(detail) }), terrain, elevationShown), earthquakes, map.earthquakes.on),
+        zoom,
+      )
     : [];
+  // MapTiler's free plan asks for its logo on the map while its imagery shows.
+  const detailLogo = detail?.logo && zoom >= (detail.minzoom ?? 13) ? detail.logo : null;
   const locationError = {
     mapLocationDenied: text.mapLocationDenied,
     mapLocationTimeout: text.mapLocationTimeout,
@@ -657,25 +667,42 @@ export default function MapStage({
         </Box>
       )}
 
-      {/* The credits, in the strip under the result widget. */}
+      {/* The credits, in the strip under the result widget; MapTiler's logo
+          above the (i) while its imagery shows, clear of the pointer readout. */}
       <Box
         sx={{
           position: "absolute",
           right: 8,
           bottom: 8,
           zIndex: 2,
-          // Desktop: one row in the strip under the result widget (WORKSPACE.strip).
+          // Desktop: the credits are one row in the strip under the result widget (WORKSPACE.strip).
           display: "flex",
-          flexDirection: "row",
+          flexDirection: "column",
           alignItems: "flex-end",
-          gap: "8px",
+          gap: "6px",
           maxWidth: "calc(100% - 16px)",
           pointerEvents: "none",
           "& > *": { pointerEvents: "auto" },
           // The sheet overlaps the map's lower edge by 14 px.
-          [PHONE]: { bottom: 22, flexDirection: "column", alignItems: "flex-end", gap: "2px" },
+          [PHONE]: { bottom: 22, gap: "2px" },
         }}
       >
+        {detailLogo && (
+          <Box
+            component="a"
+            href={detailLogo.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{
+              display: "inline-flex",
+              lineHeight: 0,
+              borderRadius: "2px",
+              "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 2 },
+            }}
+          >
+            <Box component="img" src={detailLogo.src} alt="MapTiler" sx={{ height: 20, width: "auto", display: "block" }} />
+          </Box>
+        )}
         <Attribution credits={credits} revision={map.styleRevision} />
       </Box>
 

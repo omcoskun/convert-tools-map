@@ -38,6 +38,21 @@ export function resolveIwc(value) {
   return value;
 }
 
+/**
+ * Reads the MapTiler key for the satellite's close-up imagery (a repository
+ * secret on GitHub Pages). Unset or blank means no close-up imagery; the key
+ * is trimmed. Anything but letters, digits, "_" and "-" stops the build, and
+ * the message never repeats the value, which is a secret.
+ * @param {string | undefined} value
+ * @returns {string | null}
+ */
+export function resolveMaptilerKey(value) {
+  const key = (value ?? "").trim();
+  if (key === "") return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(key)) throw new Error('MAPTILER_KEY may hold only letters, digits, "_" and "-".');
+  return key;
+}
+
 // Browsers supported by @mui/material v5; the core itself needs Chrome 67,
 // Firefox 68 and Safari 14, which these already cover.
 export const BROWSER_TARGETS = Object.freeze({
@@ -50,14 +65,19 @@ export const BROWSER_TARGETS = Object.freeze({
 
 /**
  * Every https URL in an object, depth first (config.json's map section:
- * basemap styles, the satellite tile template, attribution links).
+ * basemap styles, the satellite tile templates, a logo image), leaving out
+ * links (credits and the logo's "href"), which are not fetched.
  * @param {unknown} value
  * @returns {string[]}
  */
 function urlsIn(value) {
   if (typeof value === "string") return /^https:\/\//.test(value) ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(urlsIn);
-  if (value && typeof value === "object") return Object.values(value).flatMap(urlsIn);
+  if (value && typeof value === "object") {
+    return Object.entries(value)
+      .filter(([key]) => key !== "attribution" && key !== "href")
+      .flatMap(([, entry]) => urlsIn(entry));
+  }
   return [];
 }
 
@@ -73,7 +93,7 @@ export function mapOrigins(map) {
     ...(map?.basemaps ?? []),
     ...(map?.terrain ? [map.terrain] : []),
     ...(map?.earthquakes ? [map.earthquakes] : []),
-  ].map((entry) => ({ ...entry, attribution: undefined }));
+  ];
   return [...new Set(urlsIn(fetched).map((url) => new URL(url.replace(/[{}]/g, "")).origin))].sort();
 }
 
@@ -96,6 +116,7 @@ export const CONTENT_SECURITY_POLICY = [
 export default function config(env, argv) {
   const production = argv.mode === "production";
   const iwc = resolveIwc(process.env.IWC);
+  const maptilerKey = resolveMaptilerKey(process.env.MAPTILER_KEY);
 
   return {
     mode: production ? "production" : "development",
@@ -143,6 +164,7 @@ export default function config(env, argv) {
     plugins: [
       new webpack.DefinePlugin({
         "process.env.IWC": JSON.stringify(iwc),
+        "process.env.MAPTILER_KEY": JSON.stringify(maptilerKey),
       }),
       new HtmlWebpackPlugin({
         template: "./src/index.html",

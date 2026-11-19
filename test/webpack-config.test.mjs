@@ -10,19 +10,30 @@ import config, {
   MAP_ORIGINS,
   mapOrigins,
   resolveIwc,
+  resolveMaptilerKey,
 } from "../webpack.config.js";
 import { APP_ROOT } from "./support/files.mjs";
 
-/** Builds the config with IWC set to value (undefined: unset), then restores the environment. */
-function configWith(value, mode) {
-  const saved = process.env.IWC;
-  if (value === undefined) delete process.env.IWC;
-  else process.env.IWC = value;
+/** Sets (undefined: removes) an environment variable and returns a function that puts it back. */
+function setEnv(name, value) {
+  const saved = process.env[name];
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+  return () => {
+    if (saved === undefined) delete process.env[name];
+    else process.env[name] = saved;
+  };
+}
+
+/** Builds the config with IWC and MAPTILER_KEY set to these values (undefined: unset), then restores the environment. */
+function configWith(value, mode, maptilerKey) {
+  const restoreIwc = setEnv("IWC", value);
+  const restoreKey = setEnv("MAPTILER_KEY", maptilerKey);
   try {
     return config({}, { mode });
   } finally {
-    if (saved === undefined) delete process.env.IWC;
-    else process.env.IWC = saved;
+    restoreKey();
+    restoreIwc();
   }
 }
 
@@ -53,8 +64,29 @@ test("IWC is embedded as process.env.IWC, null when unset", () => {
     ["", "null"],
   ]) {
     const definitions = plugin(configWith(value, "production"), "DefinePlugin").definitions;
-    assert.deepEqual(definitions, { "process.env.IWC": expected }, String(value));
+    assert.deepEqual(definitions, { "process.env.IWC": expected, "process.env.MAPTILER_KEY": "null" }, String(value));
   }
+});
+
+test("resolveMaptilerKey: unset or blank is no key; a key is trimmed; anything else stops the build", () => {
+  for (const value of [undefined, "", "  ", "\n"]) assert.equal(resolveMaptilerKey(value), null, JSON.stringify(value));
+  assert.equal(resolveMaptilerKey("AbC123xyz"), "AbC123xyz");
+  assert.equal(resolveMaptilerKey(" get_your-own_X1\n"), "get_your-own_X1");
+  for (const value of ["abc 123", "abc?x=1", "a/b", '"x"', "ab&c"]) {
+    // The message never repeats the value: it is a secret in the build log.
+    assert.throws(() => resolveMaptilerKey(value), (error) => {
+      assert.equal(error.message, 'MAPTILER_KEY may hold only letters, digits, "_" and "-".');
+      return true;
+    });
+  }
+});
+
+test("the MapTiler key is embedded as process.env.MAPTILER_KEY, null when unset", () => {
+  const embedded = (key) => plugin(configWith(undefined, "production", key), "DefinePlugin").definitions["process.env.MAPTILER_KEY"];
+  assert.equal(embedded(undefined), "null");
+  assert.equal(embedded(""), "null");
+  assert.equal(embedded(" Key_1-2 "), '"Key_1-2"');
+  assert.throws(() => configWith(undefined, "production", "bad key"), /MAPTILER_KEY may hold only/);
 });
 
 test("output uses relative URLs and app/build; the dev server listens on 3008", () => {
@@ -80,6 +112,7 @@ test("production pages carry the Content-Security-Policy meta tag, development p
   assert.doesNotMatch(CONTENT_SECURITY_POLICY, /unsafe-eval/);
   // No image host: tiles and imagery are fetched, then decoded from blobs.
   assert.deepEqual(MAP_ORIGINS, [
+    "https://api.maptiler.com",
     "https://earthquake.usgs.gov",
     "https://elevation-tiles-prod.s3.amazonaws.com",
     "https://gibs.earthdata.nasa.gov",
@@ -103,6 +136,26 @@ test("map origins come from styles and tile templates, not from attribution link
   };
   assert.deepEqual(mapOrigins(map), ["https://one.example", "https://three.example", "https://two.example"]);
   assert.deepEqual(mapOrigins(undefined), []);
+});
+
+test("links in nested credits and logos are not map origins; the imagery they credit is", () => {
+  const map = {
+    basemaps: [
+      {
+        id: "s",
+        style: "https://style.example/s",
+        raster: {
+          tiles: "https://imagery.example/{z}/{y}/{x}.jpg",
+          detail: {
+            url: "https://detail.example/tiles.json?key={key}",
+            logo: { src: "https://detail.example/logo.svg", href: "https://brand.example" },
+            attribution: [{ text: "D", href: "https://credit.example/d" }],
+          },
+        },
+      },
+    ],
+  };
+  assert.deepEqual(mapOrigins(map), ["https://detail.example", "https://imagery.example", "https://style.example"]);
 });
 
 test("MapLibre is a separate chunk with its stylesheet and worker copied to vendor/", () => {

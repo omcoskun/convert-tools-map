@@ -122,6 +122,18 @@ export const SATELLITE_SOURCE = "convert-satellite";
 const SATELLITE_LAYER = "convert-satellite";
 export const SATELLITE_FALLBACK_SOURCE = "convert-satellite-fallback";
 const SATELLITE_FALLBACK_LAYER = "convert-satellite-fallback";
+// MapTiler's close-up imagery (raster.detail), drawn above EOX from its
+// minzoom when the build has a MapTiler key; EOX shows wherever it is missing.
+export const DETAIL_SOURCE = "convert-satellite-detail";
+export const DETAIL_LAYER = "convert-satellite-detail";
+// MapTiler's answers to a wrong or restricted key (401, 403) and to a used-up
+// quota (429): the close-up imagery is then dropped until the page reloads.
+const DETAIL_REFUSALS = new Set([401, 403, 429]);
+
+/** Whether a map error is MapTiler refusing the close-up imagery's key or quota. */
+export function isDetailRefusal(event) {
+  return event?.sourceId === DETAIL_SOURCE && DETAIL_REFUSALS.has(event.error?.status);
+}
 
 // Kept from the vector style over imagery: boundaries and the names of
 // places and waters, recoloured to read on photographs.
@@ -166,8 +178,10 @@ export function continentFeatures(continents, names, language) {
 
 /** The id of the layer right above the satellite imagery: the night layer goes under it. */
 export function firstLayerAboveImagery(layers) {
-  const index = (layers ?? []).findIndex((layer) => layer.id === SATELLITE_LAYER);
-  return index < 0 ? undefined : layers[index + 1]?.id;
+  const all = layers ?? [];
+  const index = all.findIndex((layer) => layer.id === SATELLITE_LAYER);
+  if (index < 0) return undefined;
+  return all[all[index + 1]?.id === DETAIL_LAYER ? index + 2 : index + 1]?.id;
 }
 
 /** The style's bold font for the continent names, else its first font. */
@@ -191,7 +205,7 @@ function boldFont(layers) {
  * @param {{ continents?: object }} [options] continents: the continent name
  *   points (continentFeatures), drawn above every other label
  */
-export function satelliteStyle(vectorStyle, raster, { continents } = {}) {
+export function satelliteStyle(vectorStyle, raster, { continents, detailKey } = {}) {
   if (!vectorStyle || !Array.isArray(vectorStyle.layers)) return vectorStyle;
   const kept = vectorStyle.layers
     .filter((layer) => OVERLAY_SOURCE_LAYERS.has(layer["source-layer"]) && (layer.type === "symbol" || layer.type === "line"))
@@ -218,6 +232,8 @@ export function satelliteStyle(vectorStyle, raster, { continents } = {}) {
     maxzoom: maxzoom ?? defaultMaxzoom,
   });
   const sources = Object.fromEntries(Object.entries(vectorStyle.sources ?? {}).filter(([, source]) => source?.type !== "raster"));
+  // MapTiler's TileJSON names the tiles and their zooms; the key goes in its query.
+  const detail = raster.detail && detailKey ? raster.detail : null;
   return {
     ...vectorStyle,
     sources: {
@@ -227,12 +243,16 @@ export function satelliteStyle(vectorStyle, raster, { continents } = {}) {
       // (stretched) instead of an empty background.
       ...(raster.fallback ? { [SATELLITE_FALLBACK_SOURCE]: rasterSource(raster.fallback, 8) } : {}),
       [SATELLITE_SOURCE]: rasterSource(raster, 14),
+      ...(detail
+        ? { [DETAIL_SOURCE]: { type: "raster", url: detail.url.replace("{key}", encodeURIComponent(detailKey)), tileSize: detail.tileSize ?? 512 } }
+        : {}),
       [CONTINENT_SOURCE]: { type: "geojson", data: continents ?? EMPTY_COLLECTION },
     },
     layers: [
       { id: "background", type: "background", paint: { "background-color": "#0b1622" } },
       ...(raster.fallback ? [{ id: SATELLITE_FALLBACK_LAYER, type: "raster", source: SATELLITE_FALLBACK_SOURCE, paint: { "raster-fade-duration": 0 } }] : []),
       { id: SATELLITE_LAYER, type: "raster", source: SATELLITE_SOURCE, paint: { "raster-fade-duration": 150, "raster-contrast": 0.06, "raster-saturation": 0.08 } },
+      ...(detail ? [{ id: DETAIL_LAYER, type: "raster", source: DETAIL_SOURCE, minzoom: detail.minzoom ?? 13, paint: { "raster-fade-duration": 150 } }] : []),
       ...kept,
       // Last, so its names win label collisions over country names.
       {

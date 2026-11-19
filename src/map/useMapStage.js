@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inverseGeodesic } from "@omcoskun/convert-tools";
 import { readPref, writePref } from "../lib/prefs.js";
+import { MAPTILER_KEY } from "../env.js";
 import {
   CONTINENT_SOURCE,
+  DETAIL_LAYER,
+  DETAIL_SOURCE,
   NIGHT_SOURCE,
   TONE_COLORS,
   basemapSource,
   continentFeatures,
   findBasemap,
   firstLayerAboveImagery,
+  isDetailRefusal,
   pruneTileSamples,
   satelliteStyle,
   tileSample,
@@ -630,6 +634,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const dragRef = useRef({ id: null, frame: 0, pending: null });
   const latestRef = useRef(null);
   const basemapRef = useRef({ remote: true, styleLoaded: false, tileSamples: [], partial: false, localizedLayers: [] });
+  // Set once MapTiler refuses the key or the quota: the satellite map then
+  // leaves its close-up imagery out until the page reloads.
+  const detailRefusedRef = useRef(false);
   const reloadBasemapRef = useRef(null);
   const fitSeenRef = useRef({ owner, fitRequest: scene.fitRequest });
   const modeRef = useRef("3d");
@@ -667,6 +674,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const [viewMode, setViewMode] = useState("3d");
   const [navigation, setNavigation] = useState({ canZoomIn: true, canZoomOut: true });
   const [rotated, setRotated] = useState(false);
+  // The zoom when the view last settled (moveend), for the credits list.
+  const [zoom, setZoom] = useState(null);
+  const [detailRefused, setDetailRefused] = useState(false);
   const [status, setStatus] = useState("loading");
   const [basemapStatus, setBasemapStatus] = useState("loading");
   const [loaded, setLoaded] = useState({ id: null, tone: source.tone });
@@ -687,7 +697,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     if (current.raster) {
       const latest = latestRef.current;
       const continents = continentFeatures(current.continents ?? [], latest?.labels?.continents ?? {}, latest?.language ?? "tr");
-      tuned = satelliteStyle(tuned, current.raster, { continents });
+      tuned = satelliteStyle(tuned, current.raster, { continents, detailKey: detailRefusedRef.current ? null : MAPTILER_KEY });
     }
     basemapRef.current.localizedLayers = (tuned?.layers ?? []).filter(isLocalizedLabelLayer).map((layer) => layer.id);
     return tuned;
@@ -1228,6 +1238,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       map.on("moveend", () => {
         updateNavigation();
         updateCompass();
+        setZoom(map.getZoom());
         updateGridRef.current?.();
       });
       map.on("resize", syncView);
@@ -1295,12 +1306,25 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         syncEarthquakes();
         drawLocation();
         syncView();
+        setZoom(map.getZoom());
         setStatus("ready");
         setStyleRevision((value) => value + 1);
       });
 
       map.on("error", (event) => {
         if (disposed || !basemapState.remote) return;
+        // The close-up imagery never decides the basemap's health: EOX shows
+        // under it. A refused key or quota drops it until the page reloads.
+        if (event?.sourceId === DETAIL_SOURCE) {
+          if (isDetailRefusal(event) && !detailRefusedRef.current) {
+            detailRefusedRef.current = true;
+            console.warn("MapTiler refused the close-up imagery (key or quota); showing EOX only.");
+            if (map.getLayer(DETAIL_LAYER)) map.removeLayer(DETAIL_LAYER);
+            if (map.getSource(DETAIL_SOURCE)) map.removeSource(DETAIL_SOURCE);
+            setDetailRefused(true);
+          }
+          return;
+        }
         if (!basemapState.styleLoaded) {
           console.warn("Basemap style unavailable; showing the offline grid.", event.error);
           switchToFallback();
@@ -1314,9 +1338,10 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       // requests) are noise, a real share of failures is not.
       const recordTileSample = (event) => {
         if (disposed || !basemapState.remote || !basemapState.styleLoaded) return;
-        // The night side's tiles are drawn here, not fetched, and a failing
-        // earthquake feed is not a sign of the basemap's health.
-        if (event?.sourceId === NIGHT_SOURCE || isDemSource(event?.sourceId) || isEarthquakeSource(event?.sourceId)) return;
+        // The night side's tiles are drawn here, not fetched; a failing
+        // earthquake feed is not a sign of the basemap's health, and EOX
+        // shows wherever the close-up imagery is missing.
+        if (event?.sourceId === NIGHT_SOURCE || event?.sourceId === DETAIL_SOURCE || isDemSource(event?.sourceId) || isEarthquakeSource(event?.sourceId)) return;
         const sample = tileSample(event);
         if (!sample) return;
         const now = performance.now();
@@ -1750,6 +1775,10 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     chooseEarthquakeView,
     loaded,
     styleRevision,
+    zoom,
+    // Whether the satellite map may draw MapTiler's close-up imagery: the
+    // build has a key and MapTiler has not refused it.
+    detailImagery: Boolean(MAPTILER_KEY) && !detailRefused,
     subscribeView,
     readCamera,
     measureScale,

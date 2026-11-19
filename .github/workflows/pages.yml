@@ -38,9 +38,13 @@ jobs:
 
       # The build uses relative URLs, so it works under /convert-tools-map/
       # without a base-path setting. IWC is left unset: which variant
-      # (hap or hwf) Pages should show is not decided.
+      # (hap or hwf) Pages should show is not decided. MAPTILER_KEY (a
+      # repository secret, restricted to this site in MapTiler's dashboard)
+      # turns on the satellite's close-up imagery; without it EOX alone shows.
       - name: Build
         run: npm run build
+        env:
+          MAPTILER_KEY: ${{ secrets.MAPTILER_KEY }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v6

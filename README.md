@@ -137,6 +137,15 @@ Değişmeyen kurallar:
   IWC=hap npm run build
   ```
 
+- `MAPTILER_KEY` derleme değişkeni uydu haritasının yakın görüntüsünü açar
+  (aşağıya bakın). `DefinePlugin` ile `process.env.MAPTILER_KEY` olarak
+  gömülür; boşsa ya da yoksa yakın görüntü olmaz, yerel geliştirme, testler ve
+  CI anahtar istemez. Anahtar git'e girmez: GitHub Pages derlemesi onu
+  `MAPTILER_KEY` adlı repo secret'ından alır. Anahtar MapTiler panelinde
+  `omcoskun.github.io` ve `localhost` ile sınırlandırılır. Harf, rakam, `_`
+  ve `-` dışında bir karakter derlemeyi durdurur (hata mesajı anahtarı
+  yazmaz).
+
 - Ekip standardı Emotion ve kurum içi bir MUI çatalıdır. Çatala
   erişilemediği için yerine `@mui/material` 5.18.0 kullanılır. Bütün MUI
   importları yalnız `src/ui/index.js` üzerinden geçer; çatala geçmek o
@@ -179,7 +188,14 @@ Değişmeyen kurallar:
   görünümde aralıklı büyük harflerle yazılır. Uydu haritasında gecenin
   olduğu yarı, Güneş'in o anki konumuna göre (cihaz saati, 5 dakikada bir)
   karartılır ve NASA Black Marble şehir ışıklarıyla çizilir (`night`;
-  kamu malı); bu katman 3. düzeyden sonra söner, 6. düzeyde hiç görünmez. Altlığın "bazı parçalar yüklenemedi" uyarısı, son 10
+  kamu malı); bu katman 3. düzeyden sonra söner, 6. düzeyde hiç görünmez.
+  Derlemede `MAPTILER_KEY` varsa 13. düzeyden itibaren EOX'un üstüne
+  MapTiler'ın yakın uydu görüntüsü (`raster.detail`, ücretsiz plan, kart
+  istemez, kota dolunca ay sonuna kadar durur, fatura çıkmaz) çizilir; bu
+  sırada sağ altta MapTiler logosu görünür. MapTiler anahtarı ya da kotayı
+  reddederse (401, 403, 429) yakın görüntü sayfa yenilenene kadar bırakılır ve
+  EOX tek başına görünür; bu hiçbir zaman "bazı parçalar yüklenemedi" uyarısı
+  çıkarmaz. Altlığın "bazı parçalar yüklenemedi" uyarısı, son 10
   saniyedeki karo yüklemelerinin en az dörtte biri (ve en az 3'ü) başarısız
   olunca çıkar; yakınlaştırırken iptal edilen istekler sayılmaz.
   Raster kaynaklar yalnız bu kataloğun girdileridir; `src/map/map-adapter.js`
@@ -192,7 +208,7 @@ Değişmeyen kurallar:
   yüksekliğe göre renkler (varsayılan kapalı; deniz tabanı boyanmaz). Üçü de
   `config.json` → `map.terrain` içindeki ücretsiz Terrarium yükseklik
   karolarını kullanır (AWS Open Data, anahtar ve hesap gerekmez; atfı Mapzen,
-  USGS, Copernicus EU-DEM, NOAA ETOPO1 ve diğerleri). Tepe gölgesi
+  USGS, EU-DEM ve diğerleri, tam liste bağlantının arkasında). Tepe gölgesi
   her altlıkta yolların, sınırların ve adların altına çizilir. 3D arazi
   yalnız küre (3D) görünümünde çalışır; yükseklik abartısı 1×, 1,5× veya 2×
   seçilir. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
@@ -210,7 +226,10 @@ Değişmeyen kurallar:
 - Atıflar sağ altta bir ⓘ düğmesinin arkasındadır; altlık yüklendikten sonra
   5 saniye açık kalır, sonra kapanır (OSMF atıf yönergeleri buna izin verir).
   Atıflar `config.json`'da yapılandırılmış `{ text, href }` öğeleridir; uzak
-  stilden HTML çizilmez.
+  stilden HTML çizilmez. Liste yalnız o an haritada çizilen kaynakları
+  sayar: bir atfın `minzoom`/`maxzoom` alanı kaynağının hangi düzeylerde
+  çizildiğini söyler (Natural Earth 7'nin, NASA 8'in altında, MapTiler 13 ve
+  üstünde); yükseklik karoları ve depremler yalnız katmanları açıkken yazılır.
 - Haritada sağ tık (dokunmatikte uzun basış) noktayı ondalık derece ve MGRS
   olarak gösterir; her biri tek tıkla kopyalanır. Noktanın yaklaşık
   yüksekliği de yazılır: 14. düzeydeki Terrarium karosunun tek pikselinden

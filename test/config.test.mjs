@@ -173,6 +173,42 @@ test("the basemaps are https styles with structured attributions; the satellite 
   assert.doesNotMatch(JSON.stringify(config), /arcgis/i);
 });
 
+test("the satellite's close-up imagery is MapTiler's, its key added at build time, with logo and credit", () => {
+  const satellite = config.map.basemaps.find((basemap) => basemap.id === "satellite");
+  const { detail } = satellite.raster;
+  // The Tiles API's TileJSON (free plan, no card); {key} is filled in from MAPTILER_KEY.
+  assert.equal(detail.url, "https://api.maptiler.com/tiles/satellite-v4/tiles.json?key={key}");
+  assert.equal(detail.tileSize, 512);
+  // Above EOX only where EOX runs out of detail.
+  assert.equal(detail.minzoom, 13);
+  assert.ok(detail.minzoom <= satellite.raster.maxzoom);
+  // The free plan asks for the logo, linking to MapTiler, and the text credit.
+  assert.deepEqual(detail.logo, { src: "https://api.maptiler.com/resources/logo.svg", href: "https://www.maptiler.com" });
+  assert.deepEqual(detail.attribution, [{ text: "© MapTiler", href: "https://www.maptiler.com/copyright/" }]);
+  // No key is ever written into the repository.
+  assert.doesNotMatch(JSON.stringify(config), /key=(?!\{key\})/);
+});
+
+test("credits carry the zooms their sources are drawn at: Natural Earth below 7, NASA below 8", () => {
+  const credit = (id, pattern) => config.map.basemaps.find((basemap) => basemap.id === id).attribution.find(({ text }) => pattern.test(text));
+  // OpenFreeMap's Liberty style draws its Natural Earth relief up to zoom 7.
+  assert.equal(credit("detailed", /Natural Earth/).maxzoom, 7);
+  // Blue Marble's own tiles end at 8 (above it is only the stretched fallback);
+  // the night side's Black Marble is gone by zoom 6.
+  assert.equal(credit("satellite", /NASA/).maxzoom, 8);
+  for (const basemap of config.map.basemaps) {
+    for (const { text, minzoom, maxzoom } of basemap.attribution) {
+      if (minzoom !== undefined) assert.ok(Number.isFinite(minzoom), text);
+      if (maxzoom !== undefined) assert.ok(Number.isFinite(maxzoom), text);
+    }
+    // OpenStreetMap and the imagery are credited at every zoom.
+    for (const pattern of [/OpenStreetMap/, /EOX/]) {
+      const always = basemap.attribution.find(({ text }) => pattern.test(text));
+      if (always) assert.equal(always.minzoom ?? always.maxzoom, undefined, `${basemap.id}: ${always.text}`);
+    }
+  }
+});
+
 test("the terrain is the free Terrarium elevation tiles from their own bucket, with their credit", () => {
   const { terrain } = config.map;
   // AWS Open Data: no key, no account, no card. The bucket's own host keeps
@@ -193,6 +229,8 @@ test("the terrain is the free Terrarium elevation tiles from their own bucket, w
   assert.match(credit.text, /Mapzen/);
   assert.match(credit.text, /USGS/);
   assert.match(credit.text, /EU-DEM/);
+  // Short enough for the credits strip; the full list is behind the link.
+  assert.ok(credit.text.length <= 50, credit.text);
 });
 
 test("the earthquakes are the USGS feed of the past week's M2.5+ events, with its credit", () => {

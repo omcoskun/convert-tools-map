@@ -7,3 +7,10 @@
  * @type {"hap" | "hwf" | null}
  */
 export const IWC = process.env.IWC || null;
+
+/**
+ * The MapTiler key for the satellite's close-up imagery, or null when the
+ * build had none (local development, tests, CI): then EOX alone is shown.
+ * @type {string | null}
+ */
+export const MAPTILER_KEY = process.env.MAPTILER_KEY || null;
