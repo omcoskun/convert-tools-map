@@ -188,8 +188,8 @@ function ExaggerationChoice({ label, language, value, onChoose }) {
  *   onChooseBasemap: (id: string) => void,
  *   overlays: { graticule: boolean, mgrs: boolean },
  *   onToggleOverlay: (name: "graticule" | "mgrs") => void,
- *   terrain: { relief: boolean, threeD: boolean, exaggeration: number } | null,
- *   onToggleTerrain: (name: "relief" | "threeD") => void,
+ *   terrain: { relief: boolean, colorRelief: boolean, threeD: boolean, exaggeration: number } | null,
+ *   onToggleTerrain: (name: "relief" | "colorRelief" | "threeD") => void,
  *   onChooseExaggeration: (value: number) => void,
  *   scalePinned: boolean,
  *   onToggleScalePinned: () => void,
@@ -365,6 +365,7 @@ export default function LayerPanel({
             {text.mapTerrain}
           </Box>
           <SwitchRow label={text.mapHillshade} checked={terrain.relief} onToggle={() => onToggleTerrain("relief")} />
+          <SwitchRow label={text.mapColorRelief} checked={terrain.colorRelief} onToggle={() => onToggleTerrain("colorRelief")} />
           <SwitchRow label={text.mapTerrain3d} checked={terrain.threeD} onToggle={() => onToggleTerrain("threeD")} />
           {terrain.threeD && (
             <ExaggerationChoice label={text.mapExaggeration} language={language} value={terrain.exaggeration} onChoose={onChooseExaggeration} />

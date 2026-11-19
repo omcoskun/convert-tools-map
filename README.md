@@ -188,8 +188,9 @@ Değişmeyen kurallar:
   gösterir; ölçüm ve seçim çalışmaya devam eder. OpenFreeMap ücretsizdir ama
   hizmet garantisi (SLA) vermez; gerekirse aynı stil kendi sunucunuzda
   barındırılabilir.
-- Arazi (varsayılan açık, seçim hatırlanır): tepe gölgesi ve 3D arazi. İkisi
-  de `config.json` → `map.terrain` içindeki ücretsiz Terrarium yükseklik
+- Arazi (seçim hatırlanır): tepe gölgesi ve 3D arazi (varsayılan açık) ile
+  yüksekliğe göre renkler (varsayılan kapalı; deniz tabanı boyanmaz). Üçü de
+  `config.json` → `map.terrain` içindeki ücretsiz Terrarium yükseklik
   karolarını kullanır (AWS Open Data, anahtar ve hesap gerekmez; atfı Mapzen,
   USGS, Copernicus EU-DEM, NOAA ETOPO1 ve diğerleri). Tepe gölgesi
   her altlıkta yolların, sınırların ve adların altına çizilir. 3D arazi

@@ -45,10 +45,13 @@ import { createNightLayer } from "./night-layer.js";
 import { mgrsZoneFeatures } from "./mgrs-zones.js";
 import { createElevationReader, loadImageData } from "./elevation.js";
 import {
+  COLOR_RELIEF_LAYER,
   EXAGGERATIONS,
   HILLSHADE_LAYER,
   HILLSHADE_SOURCE,
   TERRAIN_SOURCE,
+  colorReliefBeforeId,
+  colorReliefLayer,
   demSource,
   hillshadeBeforeId,
   hillshadeLayer,
@@ -615,6 +618,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   // Relief and 3D terrain start on: the map is a detailed one.
   const [terrainView, setTerrainView] = useState(() => ({
     relief: readPref("map-hillshade", true),
+    colorRelief: readPref("map-color-relief", false),
     threeD: readPref("map-terrain", true),
     exaggeration: readPref("map-exaggeration", 1, EXAGGERATIONS),
   }));
@@ -690,22 +694,28 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     if (map) map.easeTo({ zoom: map.getZoom() + delta, duration: animation(250) });
   }, []);
 
-  // ---- Relief and 3D terrain: put back after every style load -------------
-  // Only on the remote basemap (the offline grid fetches nothing). The 3D
-  // terrain only on the globe view: the flat map is never tilted.
+  // ---- Relief, colour relief and 3D terrain: back after every style load ---
+  // Only on the remote basemap (the offline grid fetches nothing). The colour
+  // relief reads the hillshade's source. The 3D terrain only on the globe
+  // view: the flat map is never tilted.
   const syncTerrain = useCallback(() => {
     const map = mapRef.current;
     const latest = latestRef.current;
     const config = latest?.terrain;
     if (!map || !config || !basemapRef.current.remote || !map.getLayer(CASING_LAYER)) return;
-    const { relief, threeD, exaggeration } = latest.terrainView;
+    const { relief, colorRelief, threeD, exaggeration } = latest.terrainView;
     const wantTerrain = threeD && modeRef.current === "3d";
-    if (relief && !map.getSource(HILLSHADE_SOURCE)) map.addSource(HILLSHADE_SOURCE, demSource(config));
+    if ((relief || colorRelief) && !map.getSource(HILLSHADE_SOURCE)) map.addSource(HILLSHADE_SOURCE, demSource(config));
     if (wantTerrain && !map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, demSource(config));
     if (relief && !map.getLayer(HILLSHADE_LAYER)) {
       map.addLayer(hillshadeLayer(sourceRef.current.tone), hillshadeBeforeId(map.getStyle().layers));
     } else if (!relief && map.getLayer(HILLSHADE_LAYER)) {
       map.removeLayer(HILLSHADE_LAYER);
+    }
+    if (colorRelief && !map.getLayer(COLOR_RELIEF_LAYER)) {
+      map.addLayer(colorReliefLayer(sourceRef.current.tone), colorReliefBeforeId(map.getStyle().layers));
+    } else if (!colorRelief && map.getLayer(COLOR_RELIEF_LAYER)) {
+      map.removeLayer(COLOR_RELIEF_LAYER);
     }
     const current = map.getTerrain();
     if (wantTerrain) {
@@ -1390,6 +1400,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   // ---- Relief and 3D terrain -------------------------------------------------
   useEffect(() => {
     writePref("map-hillshade", terrainView.relief);
+    writePref("map-color-relief", terrainView.colorRelief);
     writePref("map-terrain", terrainView.threeD);
     writePref("map-exaggeration", terrainView.exaggeration);
     if (styleRevision > 0) syncTerrain();

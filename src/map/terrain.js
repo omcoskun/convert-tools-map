@@ -1,7 +1,8 @@
 // Relief and 3D terrain from config.json's map.terrain: free Terrarium
 // elevation tiles (AWS Open Data, no key). Pure: tested in
 // test/terrain.test.mjs. useMapStage adds the sources, the hillshade layer
-// and the terrain after every style load.
+// and the terrain after every style load. The colour relief reads the
+// hillshade's source, tinting the same tiles by height.
 //
 // Terrain and hillshade read the same tiles through two sources, as
 // MapLibre's own 3D terrain example does: the terrain mesh and the shading
@@ -86,6 +87,50 @@ export function hillshadeBeforeId(layers) {
     (layer) => layer.type === "symbol" || ABOVE_RELIEF.has(layer["source-layer"]) || (layer.type === "line" && !layer["source-layer"]),
   );
   return above?.id;
+}
+
+export const COLOR_RELIEF_LAYER = "convert-color-relief";
+
+/** The colour ramp of the relief, as [metres above sea level, colour]; the lowest stop is the transparent sea floor. */
+export const COLOR_RELIEF_STOPS = Object.freeze([
+  Object.freeze([-1, "rgba(0, 0, 0, 0)"]),
+  Object.freeze([0, "#5f8f4e"]),
+  Object.freeze([300, "#9bb86a"]),
+  Object.freeze([800, "#d6cf8c"]),
+  Object.freeze([1500, "#d2a86a"]),
+  Object.freeze([2500, "#b07d57"]),
+  Object.freeze([3500, "#9c8f86"]),
+  Object.freeze([4500, "#e9e6e2"]),
+  Object.freeze([6000, "#ffffff"]),
+]);
+
+// Strength per basemap tone: strong enough to read the shape on a drawn map,
+// lighter on the dark one and on photographs, which carry their own colours.
+const COLOR_RELIEF_OPACITY = Object.freeze({ light: 0.4, dark: 0.3, imagery: 0.25 });
+
+/**
+ * The colour relief layer for a basemap tone: the hillshade's elevation tiles
+ * tinted by height, from lowland green to white peaks.
+ */
+export function colorReliefLayer(tone) {
+  return {
+    id: COLOR_RELIEF_LAYER,
+    type: "color-relief",
+    source: HILLSHADE_SOURCE,
+    paint: {
+      "color-relief-color": ["interpolate", ["linear"], ["elevation"], ...COLOR_RELIEF_STOPS.flat()],
+      "color-relief-opacity": COLOR_RELIEF_OPACITY[tone] ?? COLOR_RELIEF_OPACITY.light,
+    },
+  };
+}
+
+/**
+ * The id of the layer the colour relief goes under: the hillshade when it is
+ * shown, else where the hillshade would go; undefined puts it on top.
+ * @param {{ id: string, type: string, "source-layer"?: string }[] | undefined} layers
+ */
+export function colorReliefBeforeId(layers) {
+  return (layers ?? []).some((layer) => layer.id === HILLSHADE_LAYER) ? HILLSHADE_LAYER : hillshadeBeforeId(layers);
 }
 
 /**

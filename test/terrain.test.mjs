@@ -4,10 +4,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  COLOR_RELIEF_LAYER,
+  COLOR_RELIEF_STOPS,
   EXAGGERATIONS,
   HILLSHADE_LAYER,
   HILLSHADE_SOURCE,
   TERRAIN_SOURCE,
+  colorReliefBeforeId,
+  colorReliefLayer,
   demPixel,
   demSource,
   hillshadeBeforeId,
@@ -92,6 +96,38 @@ test("the hillshade goes over land, water and imagery but under roads, buildings
   assert.equal(hillshadeBeforeId(onlyApp), "convert-line-casing");
   assert.equal(hillshadeBeforeId([{ id: "background", type: "background" }]), undefined);
   assert.equal(hillshadeBeforeId(undefined), undefined);
+});
+
+test("the colour relief tints the elevation tiles by height and leaves the sea floor to the basemap", () => {
+  const layer = colorReliefLayer("light");
+  assert.equal(layer.id, COLOR_RELIEF_LAYER);
+  assert.equal(layer.id, "convert-color-relief");
+  assert.equal(layer.type, "color-relief");
+  // The hillshade's source: the same tiles, prepared the same way.
+  assert.equal(layer.source, HILLSHADE_SOURCE);
+  const ramp = layer.paint["color-relief-color"];
+  assert.deepEqual(ramp.slice(0, 3), ["interpolate", ["linear"], ["elevation"]]);
+  assert.deepEqual(ramp.slice(3), COLOR_RELIEF_STOPS.flat());
+  assert.deepEqual(
+    COLOR_RELIEF_STOPS.map(([metres]) => metres),
+    [-1, 0, 300, 800, 1500, 2500, 3500, 4500, 6000],
+  );
+  // Below −1 m (the sea floor the tiles carry) nothing is drawn: the basemap's water shows.
+  assert.deepEqual(COLOR_RELIEF_STOPS[0], [-1, "rgba(0, 0, 0, 0)"]);
+  assert.ok(Object.isFrozen(COLOR_RELIEF_STOPS) && COLOR_RELIEF_STOPS.every((stop) => Object.isFrozen(stop)));
+  assert.equal(colorReliefLayer("light").paint["color-relief-opacity"], 0.4);
+  assert.equal(colorReliefLayer("dark").paint["color-relief-opacity"], 0.3);
+  assert.equal(colorReliefLayer("imagery").paint["color-relief-opacity"], 0.25);
+  assert.equal(colorReliefLayer("unknown").paint["color-relief-opacity"], 0.4);
+});
+
+test("the colour relief goes directly under the hillshade, or where the hillshade would go", () => {
+  const water = { id: "water", type: "fill", "source-layer": "water" };
+  const roads = { id: "roads", type: "line", "source-layer": "transportation" };
+  assert.equal(colorReliefBeforeId([water, roads]), "roads");
+  assert.equal(colorReliefBeforeId([water, { id: HILLSHADE_LAYER, type: "hillshade", source: HILLSHADE_SOURCE }, roads]), HILLSHADE_LAYER);
+  assert.equal(colorReliefBeforeId([]), undefined);
+  assert.equal(colorReliefBeforeId(undefined), undefined);
 });
 
 test("the elevation credits join the basemap's while relief or 3D terrain is shown, once per link", () => {

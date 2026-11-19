@@ -358,8 +358,8 @@ export default function MapStage({
 
   const tone = TONES[picking?.tone] ?? TONES.ink;
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
-  // The elevation tiles are credited while the relief or the 3D terrain shows.
-  const elevationShown = map.terrain.relief || (map.terrain.threeD && viewMode === "3d");
+  // The elevation tiles are credited while the relief, the colours or the 3D terrain shows.
+  const elevationShown = map.terrain.relief || map.terrain.colorRelief || (map.terrain.threeD && viewMode === "3d");
   const credits = loaded.id ? terrainCredits(findBasemap(basemaps, loaded.id)?.attribution ?? [], terrain, elevationShown) : [];
   const locationError = {
     mapLocationDenied: text.mapLocationDenied,

@@ -606,6 +606,19 @@ test("the layers panel has a terrain section: hillshade, 3D terrain and, while i
   assert.ok(!visibleText(none).includes(words.mapTerrain3d));
 });
 
+test("the terrain section has an elevation colours switch between the hillshade and the 3D terrain", async () => {
+  const words = lang.tr.text;
+  const on = await layerPanel({ relief: true, colorRelief: true, threeD: false, exaggeration: 1 });
+  assert.equal(switchState(on, words.mapColorRelief), "true");
+  const off = await layerPanel({ relief: true, colorRelief: false, threeD: false, exaggeration: 1 });
+  assert.equal(switchState(off, words.mapColorRelief), "false");
+  const text = visibleText(on);
+  const hillshade = text.indexOf(words.mapHillshade);
+  const colours = text.indexOf(words.mapColorRelief);
+  const threeD = text.indexOf(words.mapTerrain3d);
+  assert.ok(hillshade >= 0 && hillshade < colours && colours < threeD, `${hillshade} ${colours} ${threeD}`);
+});
+
 /** ContextMenu for Ankara, in `language`, with this elevation state. */
 async function contextMenuText(elevation, language = "tr") {
   const { default: ContextMenu } = await import("../src/map/ContextMenu.jsx");
