@@ -90,7 +90,8 @@ import {
 // the A -> B colours: line-gradient follows line-progress within a feature.
 // The stretches beyond the edge (over a pole) are drawn by the polar overlay.
 const LINE_SOURCE = "convert-lines";
-const CASING_LAYER = "convert-lines-casing";
+// Exported: other parts of the map draw below the measured lines.
+export const CASING_LAYER = "convert-lines-casing";
 const PLAIN_LAYER = "convert-lines-plain";
 const GRADIENT_LAYER = "convert-lines-gradient";
 const GRADIENT_PIECE_PREFIX = "convert-lines-gradient-piece:";
@@ -485,7 +486,7 @@ function syncGradientPieces(map, features) {
 }
 
 /** The font of the style's labels, for the app's own; null without glyphs. */
-function labelFont(map) {
+export function labelFont(map) {
   const style = map.getStyle();
   if (!style?.glyphs) return null;
   let found = null;
@@ -738,6 +739,46 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     if (single) map.easeTo({ ...camera, padding, pitch: 0, bearing: 0, duration: animate ? animation(600) : 0 });
     else map.flyTo({ ...camera, padding, pitch: 0, bearing: 0, duration: animate ? animation(700) : 0 });
     map.once("moveend", () => placePinsOnRef.current?.());
+  }, []);
+
+  // Frames an area (an opened file's bounds) inside `padding`, at least the
+  // widgets' padding, as fitScene frames the scene. The map keeps its own
+  // padding (it is set again on every render): the frame's view is reached
+  // through the centre it shows at the map's padded middle. Says whether the
+  // map moves.
+  const fitArea = useCallback((bounds, { padding, maxZoom = 16 } = {}) => {
+    const map = mapRef.current;
+    const latest = latestRef.current;
+    if (!map || !latest || !bounds) return false;
+    const base = latest.getPadding();
+    const frame = padding ?? base;
+    const [[west, south], [east, north]] = bounds;
+    const corners = [[west, south], [east, south], [east, north], [west, north]];
+    const area = { pins: corners.map(([longitude, latitude]) => ({ longitude, latitude })), lines: [] };
+    const single = isSinglePoint(bounds);
+    const highest = single ? Math.max(map.getZoom(), 14) : maxZoom;
+    let camera = null;
+    probingRef.current = true;
+    const start = { center: map.getCenter(), zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), padding: map.getPadding() };
+    try {
+      const framed = modeRef.current === "2d"
+        ? map.cameraForBounds(bounds, { padding: frame, absolutePadding: true, maxZoom: highest, bearing: 0 })
+        : fitCamera(map, area, bounds, { padding: frame, maxZoom: highest });
+      if (framed) {
+        map.jumpTo({ center: framed.center, zoom: framed.zoom, pitch: 0, bearing: 0, padding: frame });
+        const canvas = map.getCanvas();
+        const middle = [base.left + (canvas.clientWidth - base.left - base.right) / 2, base.top + (canvas.clientHeight - base.top - base.bottom) / 2];
+        camera = { center: map.unproject(middle), zoom: framed.zoom };
+      }
+    } finally {
+      map.jumpTo(start);
+      probingRef.current = false;
+    }
+    if (!camera) return false;
+    navigatedRef.current = true;
+    if (single) map.easeTo({ ...camera, padding: base, pitch: 0, bearing: 0, duration: animation(600) });
+    else map.flyTo({ ...camera, padding: base, pitch: 0, bearing: 0, duration: animation(700) });
+    return true;
   }, []);
 
   const zoomBy = useCallback((delta) => {
@@ -1747,6 +1788,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     zoomIn,
     zoomOut,
     fitScene,
+    fitArea,
     viewMode,
     setMode,
     resetNorth,

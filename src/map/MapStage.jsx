@@ -10,12 +10,14 @@ import { TONE_COLORS, findBasemap } from "./basemaps.js";
 import { basemapCredits, creditsAt } from "./credits.js";
 import { terrainCredits } from "./terrain.js";
 import ContextMenu from "./ContextMenu.jsx";
+import ImportPanel from "./ImportPanel.jsx";
 import LayerPanel from "./LayerPanel.jsx";
 import { PIN_SHAPE } from "./map-adapter.js";
 import { SCALE_UNITS } from "./scale.js";
 import ScaleBar from "./ScaleBar.jsx";
 import SpaceBackdrop from "./SpaceBackdrop.jsx";
 import SymbolPalette from "./SymbolPalette.jsx";
+import useImports from "./useImports.js";
 import useMapStage from "./useMapStage.js";
 import useSymbols from "./useSymbols.js";
 
@@ -166,6 +168,21 @@ const stageSx = {
   "& .map-symbol": { cursor: "grab", touchAction: "none", lineHeight: 0 },
   "& .map-symbol:active": { cursor: "grabbing" },
   "& .map-symbol:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: "2px", borderRadius: "4px" },
+  // The handles of an image laid over the map (useImports.js): its corners, and its centre that moves it whole.
+  "& .map-corner": {
+    width: 18,
+    height: 18,
+    boxSizing: "border-box",
+    border: "2.5px solid #16191c",
+    borderRadius: "50%",
+    bgcolor: "#ffffff",
+    boxShadow: "0 1px 4px rgba(22, 25, 28, 0.35)",
+    cursor: "grab",
+    touchAction: "none",
+    [PHONE]: { width: 26, height: 26 },
+  },
+  "& .map-corner.is-center": { width: 24, height: 24, borderRadius: "6px", borderStyle: "dashed", cursor: "move", [PHONE]: { width: 30, height: 30 } },
+  "& .map-corner:active": { cursor: "grabbing" },
   "& .map-line-tag": {
     px: "9px",
     py: "3px",
@@ -209,7 +226,11 @@ function ControlButton({ label, icon, onClick, disabled, pressed, expanded, butt
         transition: `background-color ${MOTION.fast} ${MOTION.ease}`,
         "&:hover:not(:disabled)": { bgcolor: COLORS.paper2 },
         "&:disabled": { cursor: "default", opacity: 0.4 },
-        "&[aria-pressed='true'], &[aria-expanded='true']": { bgcolor: COLORS.selected, color: COLORS.onSelected },
+        // After the hover, so a pressed or open button keeps its colours under the pointer.
+        "&[aria-pressed='true'], &[aria-expanded='true'], &[aria-pressed='true']:hover:not(:disabled), &[aria-expanded='true']:hover:not(:disabled)": {
+          bgcolor: COLORS.selected,
+          color: COLORS.onSelected,
+        },
         "&:focus-visible": { outline: `3px solid ${COLORS.focus}`, outlineOffset: "1px" },
         "&.is-busy svg": {
           animation: "convertLocate 1.2s ease-in-out infinite",
@@ -332,6 +353,49 @@ export default function MapStage({
     [text],
   );
   const symbols = useSymbols({ map, markerLabel });
+  const cornerLabels = useMemo(
+    () => [text.importCornerTopLeft, text.importCornerTopRight, text.importCornerBottomRight, text.importCornerBottomLeft, text.importCornerCenter],
+    [text],
+  );
+  const imports = useImports({ map, cornerLabels });
+  const importsButtonRef = useRef(null);
+  const closeImports = useCallback(() => {
+    const focused = document.activeElement;
+    if (focused instanceof Element && focused.closest(".map-import-panel")) importsButtonRef.current?.focus();
+    imports.closePanel();
+  }, [imports.closePanel]);
+  // Files dropped anywhere on the map are opened as in the data panel.
+  const [dropping, setDropping] = useState(false);
+  const dragDepthRef = useRef(0);
+  const carriesFiles = (event) => Array.from(event.dataTransfer?.types ?? []).includes("Files");
+  const dropHandlers = {
+    onDragEnter: (event) => {
+      if (!ready || !carriesFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current += 1;
+      setDropping(true);
+    },
+    onDragOver: (event) => {
+      if (!ready || !carriesFiles(event)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    },
+    onDragLeave: (event) => {
+      if (!carriesFiles(event)) return;
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+      if (dragDepthRef.current === 0) setDropping(false);
+    },
+    onDrop: (event) => {
+      if (!carriesFiles(event)) return;
+      event.preventDefault();
+      dragDepthRef.current = 0;
+      setDropping(false);
+      if (!ready) return;
+      setLayersOpen(false);
+      if (symbols.open) symbols.closePalette();
+      imports.importFiles(event.dataTransfer.files);
+    },
+  };
   const closeSymbols = useCallback(() => {
     const focused = document.activeElement;
     if (focused instanceof Element && focused.closest(".map-symbol-palette")) symbolsButtonRef.current?.focus();
@@ -399,7 +463,7 @@ export default function MapStage({
   useEffect(() => {
     if (!active) return undefined;
     function onKey(event) {
-      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || symbols.open || map.contextMenu) return;
+      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || symbols.open || imports.open || map.contextMenu) return;
       if (picking) {
         handlersRef.current?.onCancelPick?.();
         event.preventDefault();
@@ -410,7 +474,7 @@ export default function MapStage({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, symbols.open, map.contextMenu]);
+  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, symbols.open, imports.open, map.contextMenu]);
 
   const tone = TONES[picking?.tone] ?? TONES.ink;
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
@@ -443,6 +507,7 @@ export default function MapStage({
       className={`map-stage${picking ? ` is-picking is-picking-${picking.tone}` : ""}`}
       aria-label={text.mapTitle}
       sx={{ ...stageSx, "--map-ink": toneColors.line, "--map-on-ink": toneColors.onLine }}
+      {...dropHandlers}
     >
       <SpaceBackdrop subscribeView={map.subscribeView} readCamera={map.readCamera} loaded={map.loaded} />
       <div className="map-canvas" ref={map.containerRef} />
@@ -597,6 +662,27 @@ export default function MapStage({
       <Box role="status" sx={visuallyHidden}>
         {linkCopied ? text.mapLinkCopied : ""}
       </Box>
+      {dropping && (
+        <Box
+          aria-hidden="true"
+          sx={{
+            position: "absolute",
+            inset: 10,
+            zIndex: 6,
+            display: "grid",
+            placeItems: "center",
+            border: `2px dashed ${COLORS.a}`,
+            borderRadius: `${RADIUS.widget}px`,
+            bgcolor: "rgba(36, 80, 224, 0.08)",
+            pointerEvents: "none",
+          }}
+        >
+          <Box sx={{ ...glassSurface, display: "flex", alignItems: "center", gap: 1, px: 2, py: 1.25, borderRadius: `${RADIUS.pill}px`, color: COLORS.ink, fontFamily: UI_FONT, fontSize: TYPE.body, fontWeight: 650 }}>
+            <Icon name="import" size={18} />
+            {text.importDropHint}
+          </Box>
+        </Box>
+      )}
 
       {/* The control column: what the map shows, where it looks, what it does. */}
       <Box
@@ -625,6 +711,7 @@ export default function MapStage({
             expanded={layersOpen}
             onClick={() => {
               if (symbols.open) symbols.closePalette();
+              imports.closePanel();
               setLayersOpen((open) => !open);
             }}
             disabled={!ready}
@@ -641,7 +728,20 @@ export default function MapStage({
             expanded={symbols.open}
             onClick={() => {
               setLayersOpen(false);
+              imports.closePanel();
               symbols.togglePalette();
+            }}
+            disabled={!ready}
+          />
+          <ControlButton
+            label={text.importTitle}
+            icon="import"
+            buttonRef={importsButtonRef}
+            expanded={imports.open}
+            onClick={() => {
+              setLayersOpen(false);
+              if (symbols.open) symbols.closePalette();
+              imports.togglePanel();
             }}
             disabled={!ready}
           />
@@ -717,6 +817,7 @@ export default function MapStage({
           onToggleScalePinned={toggleScalePinned}
         />
         <SymbolPalette palette={symbols} open={symbols.open && ready} onClose={closeSymbols} />
+        <ImportPanel data={imports} open={imports.open && ready} onClose={closeImports} />
       </Box>
 
       {/* The scale bar, as on Apple Maps: top centre of the window, or just

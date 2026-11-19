@@ -233,6 +233,20 @@ Değişmeyen kurallar:
   --data DİZİN` çıktısından `node scripts/symbol-catalog.mjs DİZİN` ile
   üretilir; APP-6E kendi kataloğu olmadığı için 2525E'ninkini kullanır ve
   SIDC'si 16 sürümüyle yazılır.
+- Veri ve görüntü (kontrol sütunundaki indirme düğmesi, ya da dosyaları
+  haritaya bırakmak): GeoJSON, GPX (yol noktaları, rotalar, izler) ve KML
+  (nokta, çizgi, delikli alan, MultiGeometry, gx:Track) dosyaları açılır;
+  her dosya kendi renginde çizilir, gizlenir, ona yakınlaşılır ya da
+  kaldırılır. Okuyucular projenin kendisinindir (`src/map/xml.js`,
+  `src/map/geodata.js`); yalnız ad tutulur, yükseklik atılır. Dosya en çok
+  25 MB ve 50.000 şekil olabilir; KMZ (sıkıştırılmış) açılmaz, önce KML'e
+  çevrilmelidir. Bir görüntü (PNG, JPEG, WebP, GIF; en çok 40 MB, en uzun
+  kenarı 4096 px'e küçültülür) görünümün boş kısmına konur ve dört köşesi
+  ile ortadaki tutamaçtan sürüklenerek yerine oturtulur; opaklığı
+  ayarlanır, altlığın adlarının ve çizilen çizgilerin altında kalır.
+  MapLibre görüntüyü iki üçgenle çizdiği için köşeler dikdörtgenden çok
+  saparsa köşegen boyunca kırılma görünür. Dosyalar tarayıcıda okunur,
+  hiçbir yere gönderilmez ve saklanmaz: sayfa yenilenince kaybolur.
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
   sol üstte): yakınlaşırken görünür, sonra silinir; tıklayınca
   metrik, deniz mili ve imperial arasında döner; katman panelinden sabitlenebilir.
