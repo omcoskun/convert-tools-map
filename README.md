@@ -214,12 +214,8 @@ Değişmeyen kurallar:
   seçilir. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
 - Katmanlar: 3D binalar (varsayılan açık; küre görünümünde, yakınlaştırma
   14'ten itibaren, OpenFreeMap karolarındaki bina yüksekliklerinden),
-  enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler), MGRS ızgara
-  bölgeleri ve son 7 günün depremleri (bu üçü varsayılan kapalı). Depremler
-  USGS'nin ücretsiz akışından gelir (M2.5 ve üstü, anahtar gerekmez): uzakta
-  büyüklüğe göre ısı haritası, yakınlaştırınca büyüklüğe göre boyanmış
-  noktalar. Gösterim "Kümeler" seçilirse yakın depremler sayılarıyla
-  gruplanır; bir kümeye tıklayınca harita onu açacak kadar yakınlaşır.
+  enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler) ve MGRS ızgara
+  bölgeleri (bu ikisi varsayılan kapalı).
 - Ölçek çubuğu Apple tarzıdır ve haritanın üst ortasında durur (telefonda
   sol üstte): yakınlaşırken görünür, sonra silinir; tıklayınca
   metrik, deniz mili ve imperial arasında döner; katman panelinden sabitlenebilir.
@@ -229,7 +225,7 @@ Değişmeyen kurallar:
   stilden HTML çizilmez. Liste yalnız o an haritada çizilen kaynakları
   sayar: bir atfın `minzoom`/`maxzoom` alanı kaynağının hangi düzeylerde
   çizildiğini söyler (Natural Earth 7'nin, NASA 8'in altında, MapTiler 13 ve
-  üstünde); yükseklik karoları ve depremler yalnız katmanları açıkken yazılır.
+  üstünde); yükseklik karoları yalnız katmanları açıkken yazılır.
 - Haritada sağ tık (dokunmatikte uzun basış) noktayı ondalık derece ve MGRS
   olarak gösterir; her biri tek tıkla kopyalanır. Noktanın yaklaşık
   yüksekliği de yazılır: 14. düzeydeki Terrarium karosunun tek pikselinden

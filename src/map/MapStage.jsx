@@ -264,7 +264,6 @@ const textButton = {
  *   basemaps: import("./basemaps.js").Basemap[],
  *   defaultBasemap: string,
  *   terrain?: import("./terrain.js").Terrain | null,
- *   earthquakes?: import("./earthquakes.js").Earthquakes | null,
  *   scene: import("./scene.js").MapScene,
  *   owner: object | null,
  *   handlersRef: { current: import("../shell/workspace-context.js").MapSceneHandlers },
@@ -274,7 +273,7 @@ const textButton = {
  *   onStatusChange: (status: import("../shell/workspace-context.js").MapStatus) => void,
  *   active: boolean,
  * }} props
- *   basemaps, defaultBasemap, terrain, earthquakes: config.map. owner: the tool that published
+ *   basemaps, defaultBasemap, terrain: config.map. owner: the tool that published
  *   the scene (see useMapStage). active: false while a page tool hides the
  *   workspace, so Esc is left alone.
  */
@@ -282,7 +281,6 @@ export default function MapStage({
   basemaps,
   defaultBasemap,
   terrain = null,
-  earthquakes = null,
   scene,
   owner,
   handlersRef,
@@ -309,7 +307,7 @@ export default function MapStage({
     }),
     [text],
   );
-  const map = useMapStage({ basemaps, defaultBasemap, terrain, earthquakes, mode, language, labels, scene, owner, handlersRef, getPadding });
+  const map = useMapStage({ basemaps, defaultBasemap, terrain, mode, language, labels, scene, owner, handlersRef, getPadding });
   const { status, basemapStatus, retry, viewMode, setMode, loaded, location } = map;
   const ready = status === "ready";
   const { picking } = scene;
@@ -364,14 +362,14 @@ export default function MapStage({
   // The elevation tiles are credited while the relief, the colours or the 3D terrain shows.
   const elevationShown = map.terrain.relief || map.terrain.colorRelief || (map.terrain.threeD && viewMode === "3d");
   // The basemap's credits (with MapTiler's while its close-up imagery is
-  // used), the elevation tiles' while they show and the earthquake feed's
-  // while its layer shows; of these, only the ones drawn at this zoom.
+  // used) and the elevation tiles' while they show; of these, only the ones
+  // drawn at this zoom.
   const loadedBasemap = loaded.id ? findBasemap(basemaps, loaded.id) : undefined;
   const detail = map.detailImagery ? loadedBasemap?.raster?.detail : undefined;
   const zoom = map.zoom ?? 0;
   const credits = loadedBasemap
     ? creditsAt(
-        terrainCredits(terrainCredits(basemapCredits(loadedBasemap, { detail: Boolean(detail) }), terrain, elevationShown), earthquakes, map.earthquakes.on),
+        terrainCredits(basemapCredits(loadedBasemap, { detail: Boolean(detail) }), terrain, elevationShown),
         zoom,
       )
     : [];
@@ -632,9 +630,6 @@ export default function MapStage({
           onChooseExaggeration={map.chooseExaggeration}
           buildings={map.buildings}
           onToggleBuildings={map.toggleBuildings}
-          earthquakes={earthquakes ? map.earthquakes : null}
-          onToggleEarthquakes={map.toggleEarthquakes}
-          onChooseEarthquakeView={map.chooseEarthquakeView}
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />

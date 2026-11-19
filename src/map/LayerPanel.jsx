@@ -192,14 +192,10 @@ function SegmentedChoice({ label, options, value, onChoose }) {
  *   onChooseExaggeration: (value: number) => void,
  *   buildings: boolean,
  *   onToggleBuildings: () => void,
- *   earthquakes: { on: boolean, view: "heat" | "clusters" } | null,
- *   onToggleEarthquakes: () => void,
- *   onChooseEarthquakeView: (view: "heat" | "clusters") => void,
  *   scalePinned: boolean,
  *   onToggleScalePinned: () => void,
  * }} props
  *   terrain is null when config.json has no map.terrain: no terrain section.
- *   earthquakes is null when config.json has no map.earthquakes: no earthquakes switch.
  */
 export default function LayerPanel({
   open,
@@ -217,9 +213,6 @@ export default function LayerPanel({
   onChooseExaggeration,
   buildings,
   onToggleBuildings,
-  earthquakes,
-  onToggleEarthquakes,
-  onChooseEarthquakeView,
 }) {
   const { text, language } = useLanguage();
   const format = new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US");
@@ -394,8 +387,6 @@ export default function LayerPanel({
       <SwitchRow label={text.mapBuildings3d} checked={buildings} onToggle={onToggleBuildings} />
       <SwitchRow label={text.mapGraticule} checked={overlays.graticule} onToggle={() => onToggleOverlay("graticule")} />
       <SwitchRow label={text.mapMgrsZones} checked={overlays.mgrs} onToggle={() => onToggleOverlay("mgrs")} />
-      {earthquakes && <SwitchRow label={text.mapEarthquakes} checked={earthquakes.on} onToggle={onToggleEarthquakes} />}
-      {earthquakes?.on && <SegmentedChoice label={text.mapEarthquakeView} options={[{ value: "heat", text: text.mapEarthquakeHeat }, { value: "clusters", text: text.mapEarthquakeClusters }]} value={earthquakes.view} onChoose={onChooseEarthquakeView} />}
       <SwitchRow label={text.mapScaleAlways} checked={scalePinned} onToggle={onToggleScalePinned} />
     </Box>
   );

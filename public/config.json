@@ -173,12 +173,6 @@
       "attribution": [
         { "text": "Terrain Tiles: Mapzen, USGS, EU-DEM and others", "href": "https://github.com/tilezen/joerd/blob/master/docs/attribution.md" }
       ]
-    },
-    "earthquakes": {
-      "data": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week.geojson",
-      "attribution": [
-        { "text": "Earthquakes: U.S. Geological Survey (USGS)", "href": "https://earthquake.usgs.gov/earthquakes/feed/" }
-      ]
     }
   }
 }

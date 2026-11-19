@@ -28,25 +28,6 @@ import {
   flatBuildingLayers,
   styleBuildingExtrusions,
 } from "./buildings.js";
-import {
-  EARTHQUAKE_CLUSTER_COUNT_LAYER,
-  EARTHQUAKE_CLUSTER_LAYER,
-  EARTHQUAKE_CLUSTER_SOURCE,
-  EARTHQUAKE_HEAT_LAYER,
-  EARTHQUAKE_POINT_LAYER,
-  EARTHQUAKE_SINGLE_LAYER,
-  EARTHQUAKE_VIEWS,
-  earthquakeClusterCountLayer,
-  earthquakeClusterLayer,
-  earthquakeClusterSource,
-  earthquakeHeatLayer,
-  earthquakePointLayer,
-  earthquakeSingleLayer,
-  earthquakeSource,
-  earthquakeViewParts,
-  earthquakesBeforeId,
-  isEarthquakeSource,
-} from "./earthquakes.js";
 import { accuracyRing, locationErrorKey } from "./location.js";
 import {
   GLOBE_MAX_ZOOM,
@@ -599,7 +580,6 @@ function installLocation(map) {
  *   basemaps: import("./basemaps.js").Basemap[],
  *   defaultBasemap: string,
  *   terrain?: import("./terrain.js").Terrain | null,
- *   earthquakes?: import("./earthquakes.js").Earthquakes | null,
  *   mode: "light" | "dark",
  *   language: string,
  *   labels: { mapCanvas: string },
@@ -612,14 +592,12 @@ function installLocation(map) {
  *   terrain: config.map.terrain, the elevation tiles of the hillshade, the 3D
  *   terrain (globe view only) and the context menu's elevation; the switches
  *   are remembered.
- *   earthquakes: config.map.earthquakes, the feed of the earthquakes layer;
- *   null hides its switch.
  *   mode: the interface theme; the standard basemap follows it.
  *   owner identifies the tool that published the scene: when it changes,
  *   the new tool's fitRequest is taken as it is, without fitting.
  *   getPadding is read at each fit, so fits keep clear of the widgets.
  */
-export default function useMapStage({ basemaps, defaultBasemap, terrain = null, earthquakes = null, mode, language, labels, scene, owner, handlersRef, getPadding }) {
+export default function useMapStage({ basemaps, defaultBasemap, terrain = null, mode, language, labels, scene, owner, handlersRef, getPadding }) {
   const containerRef = useRef(null);
   const cursorRef = useRef(null);
   const compassNodeRef = useRef(null);
@@ -661,10 +639,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     exaggeration: readPref("map-exaggeration", 1, EXAGGERATIONS),
   }));
   const [buildings, setBuildings] = useState(() => readPref("map-buildings", true));
-  const [earthquakeView, setEarthquakeView] = useState(() => ({
-    on: readPref("map-earthquakes", false),
-    view: readPref("map-earthquake-view", "heat", EARTHQUAKE_VIEWS),
-  }));
   const elevationReader = useMemo(() => (terrain ? createElevationReader(terrain, { load: loadImageData }) : null), [terrain]);
   const elevationReaderRef = useRef(elevationReader);
   const source = useMemo(() => basemapSource(findBasemap(basemaps, basemapId), mode), [basemaps, basemapId, mode]);
@@ -689,7 +663,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   const [location, setLocation] = useState({ status: "off", errorKey: null });
 
   useEffect(() => {
-    latestRef.current = { language, labels, scene, getPadding, mode, overlays, terrain, terrainView, buildings, earthquakes, earthquakeView };
+    latestRef.current = { language, labels, scene, getPadding, mode, overlays, terrain, terrainView, buildings };
     sourceRef.current = source;
     elevationReaderRef.current = elevationReader;
   });
@@ -789,39 +763,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       map.addLayer(buildingsLayer(sourceRef.current.tone, source), buildingsBeforeId(map.getStyle().layers));
     } else if (!want && map.getLayer(BUILDINGS_LAYER)) {
       map.removeLayer(BUILDINGS_LAYER);
-    }
-  }, []);
-
-  // ---- Earthquakes: the USGS feed, fetched only while switched on --------
-  const syncEarthquakes = useCallback(() => {
-    const map = mapRef.current;
-    const latest = latestRef.current;
-    if (!map || !latest?.earthquakes || !basemapRef.current.remote || !map.getLayer(CASING_LAYER)) return;
-    const { on, view } = latest.earthquakeView;
-    const wanted = on ? earthquakeViewParts(view) : null;
-    // The other view's parts go (both views' when switched off).
-    for (const parts of EARTHQUAKE_VIEWS.map(earthquakeViewParts)) {
-      if (parts.source === wanted?.source) continue;
-      for (const id of parts.layers) if (map.getLayer(id)) map.removeLayer(id);
-      if (map.getSource(parts.source)) map.removeSource(parts.source);
-    }
-    if (!wanted) return;
-    if (!map.getSource(wanted.source)) {
-      map.addSource(wanted.source, wanted.source === EARTHQUAKE_CLUSTER_SOURCE ? earthquakeClusterSource(latest.earthquakes) : earthquakeSource(latest.earthquakes));
-    }
-    const tone = sourceRef.current.tone;
-    const make = {
-      [EARTHQUAKE_HEAT_LAYER]: () => earthquakeHeatLayer(),
-      [EARTHQUAKE_POINT_LAYER]: () => earthquakePointLayer(tone),
-      [EARTHQUAKE_CLUSTER_LAYER]: () => earthquakeClusterLayer(tone),
-      [EARTHQUAKE_CLUSTER_COUNT_LAYER]: () => earthquakeClusterCountLayer(labelFont(map)),
-      [EARTHQUAKE_SINGLE_LAYER]: () => earthquakeSingleLayer(tone),
-    };
-    const before = earthquakesBeforeId(map.getStyle().layers);
-    for (const id of wanted.layers) {
-      if (map.getLayer(id)) continue;
-      const layer = make[id]();
-      if (layer) map.addLayer(layer, before);
     }
   }, []);
 
@@ -940,14 +881,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     if (modeRef.current === "2d") setMode("3d");
     else if (map.getZoom() >= BUILDINGS_MINZOOM && map.getPitch() < 20) map.easeTo({ pitch: 50, duration: animation(500) });
   }, [setMode]);
-
-  const toggleEarthquakes = useCallback(() => {
-    setEarthquakeView((current) => ({ ...current, on: !current.on }));
-  }, []);
-
-  const chooseEarthquakeView = useCallback((view) => {
-    setEarthquakeView((current) => ({ ...current, view: EARTHQUAKE_VIEWS.includes(view) ? view : "heat" }));
-  }, []);
 
   const closeContextMenu = useCallback(() => {
     menuOpenRef.current = false;
@@ -1307,7 +1240,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         syncOverlays();
         syncTerrain();
         syncBuildings();
-        syncEarthquakes();
         drawLocation();
         syncView();
         setZoom(map.getZoom());
@@ -1342,10 +1274,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       // requests) are noise, a real share of failures is not.
       const recordTileSample = (event) => {
         if (disposed || !basemapState.remote || !basemapState.styleLoaded) return;
-        // The night side's tiles are drawn here, not fetched; a failing
-        // earthquake feed is not a sign of the basemap's health, and EOX
-        // shows wherever the close-up imagery is missing.
-        if (event?.sourceId === NIGHT_SOURCE || event?.sourceId === DETAIL_SOURCE || isDemSource(event?.sourceId) || isEarthquakeSource(event?.sourceId)) return;
+        // The night side's tiles are drawn here, not fetched, and EOX shows
+        // wherever the close-up imagery is missing.
+        if (event?.sourceId === NIGHT_SOURCE || event?.sourceId === DETAIL_SOURCE || isDemSource(event?.sourceId)) return;
         const sample = tileSample(event);
         if (!sample) return;
         const now = performance.now();
@@ -1362,18 +1293,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       });
 
       map.on("click", (event) => {
-        // A click on an earthquake cluster opens it, in every mode, and places nothing.
-        if (map.getLayer(EARTHQUAKE_CLUSTER_LAYER)) {
-          const [cluster] = map.queryRenderedFeatures(event.point, { layers: [EARTHQUAKE_CLUSTER_LAYER] });
-          if (cluster) {
-            map
-              .getSource(EARTHQUAKE_CLUSTER_SOURCE)
-              ?.getClusterExpansionZoom(cluster.properties.cluster_id)
-              .then((zoom) => map.easeTo({ center: cluster.geometry.coordinates, zoom, duration: animation(500) }))
-              .catch(() => {});
-            return;
-          }
-        }
         if (!latestRef.current?.scene.picking) return;
         const origin = event.originalEvent?.target;
         if (origin instanceof Element && origin.closest(".maplibregl-marker")) return;
@@ -1532,7 +1451,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       updateGridRef.current = null;
       gridRef.current = null;
     };
-  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, syncTerrain, syncBuildings, syncEarthquakes, drawLocation]);
+  }, [initAttempt, transformStyle, handlersRef, fitScene, syncOverlays, syncTerrain, syncBuildings, drawLocation]);
 
   // ---- Basemap and theme: another style when the choice needs one --------
   useEffect(() => {
@@ -1563,13 +1482,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     writePref("map-buildings", buildings);
     if (styleRevision > 0) syncBuildings();
   }, [buildings, styleRevision, syncBuildings]);
-
-  // ---- Earthquakes ---------------------------------------------------------
-  useEffect(() => {
-    writePref("map-earthquakes", earthquakeView.on);
-    writePref("map-earthquake-view", earthquakeView.view);
-    if (styleRevision > 0) syncEarthquakes();
-  }, [earthquakeView, styleRevision, syncEarthquakes]);
 
   // ---- Pins: created, updated and removed by id -------------------------
   const createPinEntry = useCallback(
@@ -1777,9 +1689,6 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     chooseExaggeration,
     buildings,
     toggleBuildings,
-    earthquakes: earthquakeView,
-    toggleEarthquakes,
-    chooseEarthquakeView,
     loaded,
     styleRevision,
     zoom,
