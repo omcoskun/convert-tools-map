@@ -7,9 +7,10 @@ on:
 
 permissions:
   contents: read
-  # The library (@omcoskun/convert-tools) is a private GitHub Packages
-  # package; this repository has read access to it under the package's
-  # "Manage Actions access" setting, so GITHUB_TOKEN can install it.
+  # The library (@omcoskun/convert-tools) comes from GitHub Packages, which
+  # always needs a token. The package is public today, so GITHUB_TOKEN can
+  # install it. Once it is republished as private, this repository needs Read
+  # access under the package's "Manage Actions access" setting.
   packages: read
 
 concurrency:
