@@ -128,7 +128,7 @@ export default function config(env, argv) {
       // MapLibre is loaded on demand (src/map/maplibre.js) as its own chunk.
       chunkFilename: production ? "assets/[name].[contenthash:8].js" : "assets/[name].js",
       // Relative URLs so the same build works at / and under a sub-path
-      // such as GitHub Pages' /convert-tools-map/.
+      // such as GitHub Pages' /map/.
       publicPath: "",
       clean: true,
     },

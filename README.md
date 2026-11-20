@@ -1,8 +1,10 @@
-# convert-tools-map
+# Map
 
-[`@omcoskun/convert-tools`](https://github.com/omcoskun/convert-tools) kütüphanesinin
-harita tanıtım sitesi. Site hesap yapmaz: gösterdiği her değer kütüphaneden
-gelir. React 18, Webpack 5, MUI v5 ve MapLibre 6 ile yazılmıştır.
+Ayrıntılı bir harita uygulaması: katmanlar ve 3B arazi, askerî semboller,
+yer arama ve içe aktarılan veriler. Ölçüm, uzunluk ve koordinat araçları
+[`@omcoskun/convert-tools`](https://github.com/omcoskun/convert-tools)
+kütüphanesinden gelir; uygulama bu hesapları kendisi yapmaz. React 18,
+Webpack 5, MUI v5 ve MapLibre 6 ile yazılmıştır.
 
 ## Kurulum
 
@@ -73,7 +75,7 @@ açılır. Üst çubukta Harita ile üç sayfa aracı, haritanın solundaki ara�
 
 | Araç | Adres | Ne gösterir |
 |---|---|---|
-| Harita | `#map` | Araçsız harita; araç şeridi, katmanlar, semboller ve veri |
+| Harita | `#map` | Araçsız harita; araç şeridi, yer arama, katmanlar, semboller ve veri |
 | Ölçüm | `#measure` | İki nokta (ters problem), azimut + mesafe (düz problem) ve rota; WGS 84, GRS 80, küre veya özel (prolate dahil) model; bütün birimler ve jeodezik büyüklükler; neredeyse antipodal uçlarda azimut ve alan yalnız anlamlı basamaklarıyla (≈) ve belirsizliğiyle |
 | Konum | `#positions` | DD, DMS, DDM, MGRS, UTM/UPS, GARS ve GEOREF arasında çeviri; çıktı hassasiyetleri ve MGRS karesinin köşesi veya merkezi |
 | CRS | `#crs` | Desteklenen EPSG sistemleri arasında koordinat dönüşümü |

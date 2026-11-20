@@ -36,7 +36,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # The build uses relative URLs, so it works under /convert-tools-map/
+      # The build uses relative URLs, so it works under /map/
       # without a base-path setting. IWC is left unset: which variant
       # (hap or hwf) Pages should show is not decided. MAPTILER_KEY (a
       # repository secret, restricted to this site in MapTiler's dashboard)

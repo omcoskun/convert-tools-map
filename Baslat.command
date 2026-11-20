@@ -22,7 +22,7 @@ if [[ ! -d node_modules ]]; then
   fi
 fi
 
-echo "Convert başlatılıyor..."
+echo "Map başlatılıyor..."
 echo "Tarayıcı adresi: http://localhost:3008/"
 echo "Durdurmak için Control + C tuşlarına basın."
 echo

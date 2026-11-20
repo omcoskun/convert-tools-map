@@ -1,7 +1,7 @@
 {
-  "name": "convert-tools-map",
+  "name": "map",
   "version": "1.0.0",
-  "description": "@omcoskun/convert-tools kütüphanesinin harita tanıtım sitesi (React 18, Webpack 5)",
+  "description": "Map: ayrıntılı harita, askerî semboller ve @omcoskun/convert-tools ile ölçüm ve koordinat araçları (React 18, Webpack 5)",
   "private": true,
   "type": "module",
   "scripts": {

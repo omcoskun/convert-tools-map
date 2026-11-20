@@ -125,3 +125,13 @@ test("every example id in config.json has a label, and every label an example", 
     assert.deepEqual(sorted(Object.keys(lang[language].examples)), sorted(ids), language);
   }
 });
+
+test("the app is called Map in both languages, and the page's first title is the Turkish one", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const language of ["tr", "en"]) {
+    assert.equal(lang[language].text.brandName, "Map", language);
+    assert.match(lang[language].text.pageTitle, /^Map — /, language);
+  }
+  const html = readFileSync(path.resolve(import.meta.dirname, "../src/index.html"), "utf8");
+  assert.ok(html.includes(`<title>${lang.tr.text.pageTitle}</title>`), "src/index.html's title is the Turkish page title");
+});
