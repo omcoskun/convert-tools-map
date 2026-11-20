@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readPref, writePref } from "../lib/prefs.js";
 import { PHONE } from "../theme.js";
 import { drawSymbol, loadMilsymbol, loadSymbolCatalog } from "./milsymbol.js";
-import { GALLERY_TABS, cleanFavorites, toggleFavorite as toggledFavorites } from "./symbol-gallery.js";
+import { GALLERY_TABS, cleanFavorites, tabAfterChoice, toggleFavorite as toggledFavorites } from "./symbol-gallery.js";
 import {
   DEFAULT_SETTINGS,
   DEFAULT_STANDARD,
@@ -136,7 +136,13 @@ export default function useSymbols({ map, markerLabel }) {
     );
   }, []);
 
-  const chooseIcon = useCallback((entry) => applyDraft({ iconId: entry.id }), [applyDraft]);
+  const chooseIcon = useCallback(
+    (entry) => {
+      applyDraft({ iconId: entry.id });
+      setTab((current) => tabAfterChoice(current, Boolean(live.current.selectedId)));
+    },
+    [applyDraft],
+  );
   const changeSettings = useCallback((change) => applyDraft({ settings: { ...live.current.draft.settings, ...change } }), [applyDraft]);
   const changeText = useCallback(
     (key, value) => {

@@ -59,6 +59,8 @@ const inputSx = {
   font: "inherit",
   fontSize: TYPE.small,
   "&::placeholder": { color: COLORS.faint, opacity: 1 },
+  // The panel has its own clear button; the browser's would be a second one.
+  "&::-webkit-search-cancel-button": { display: "none" },
   "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 0 },
   [PHONE]: { height: 44, fontSize: 16 },
 };

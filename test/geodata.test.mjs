@@ -14,7 +14,7 @@ const code = (fn) => {
   return null;
 };
 
-test("GeoJSON: a feature collection, a feature or a bare geometry; only the name is kept of the properties", () => {
+test("GeoJSON: a feature collection, a feature or a bare geometry, with its name and plain properties", () => {
   const collection = readGeodata(
     "plan.geojson",
     JSON.stringify({
@@ -30,10 +30,21 @@ test("GeoJSON: a feature collection, a feature or a bare geometry; only the name
   );
   assert.equal(collection.type, "FeatureCollection");
   assert.deepEqual(collection.features.map((feature) => feature.geometry.type), ["Point", "LineString", "Polygon", "Point", "MultiLineString"]);
-  assert.deepEqual(collection.features.map((feature) => feature.properties), [{ name: "HQ" }, { name: "Road" }, {}, {}, {}]);
+  assert.deepEqual(collection.features.map((feature) => feature.properties), [{ name: "HQ", secret: 1 }, { name: "Road" }, {}, {}, {}]);
   assert.deepEqual(collection.counts, { points: 2, lines: 2, areas: 1 });
   assert.equal(readGeodata("a.json", '{"type":"Point","coordinates":[1,2]}').features.length, 1);
   assert.equal(readGeodata("a.json", '{"type":"Feature","geometry":{"type":"MultiPoint","coordinates":[[1,2],[3,4]]},"properties":{"name":"x"}}').counts.points, 1);
+});
+
+test("GeoJSON keeps a feature's plain properties for its card: twelve at most, numbers, booleans and short texts", () => {
+  const properties = { name: "A", title: "T", ele: 938, open: false, note: "  Meydan  ", blank: " ", nested: { a: 1 }, list: [1], none: null, long: "y".repeat(300), ["k".repeat(70)]: 1, ["__proto__"]: 2 };
+  for (let index = 0; index < 20; index += 1) properties[`p${index}`] = index;
+  const [feature] = readGeodata("a.geojson", JSON.stringify({ type: "Feature", properties, geometry: { type: "Point", coordinates: [1, 2] } })).features;
+  assert.deepEqual(feature.properties, { name: "A", title: "T", ele: 938, open: false, note: "Meydan", long: "y".repeat(200), p0: 0, p1: 1, p2: 2, p3: 3, p4: 4, p5: 5, p6: 6 });
+  assert.equal(Object.getPrototypeOf(feature.properties), Object.prototype);
+  const named = (props) => readGeodata("a.geojson", JSON.stringify({ type: "Feature", properties: props, geometry: { type: "Point", coordinates: [1, 2] } })).features[0].properties;
+  assert.deepEqual(named({ Name: "N", kind: "x" }), { name: "N", kind: "x" }, "the key the name came from is not kept twice");
+  assert.deepEqual(named(["a"]), {});
 });
 
 test("GeoJSON coordinates off the globe or not numbers drop their feature; none left is an empty file", () => {

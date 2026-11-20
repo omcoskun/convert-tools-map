@@ -61,15 +61,25 @@ function palette(icon, overrides = {}) {
 }
 
 function render(value) {
-  return markup(
-    renderToString(
-      createElement(
-        LanguageContext.Provider,
-        { value: { language: "tr", ...lang.tr } },
-        createElement(SymbolPalette, { palette: value, open: true, onClose() {} }),
-      ),
+  return markup(renderRaw(value));
+}
+
+/** The server render with Emotion's <style> tags, for tests that read the CSS. */
+function renderRaw(value) {
+  return renderToString(
+    createElement(
+      LanguageContext.Provider,
+      { value: { language: "tr", ...lang.tr } },
+      createElement(SymbolPalette, { palette: value, open: true, onClose() {} }),
     ),
   );
+}
+
+/** The whole button whose aria-label is one of the given labels. */
+function buttonLabelled(html, labels) {
+  const match = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].find((button) => labels.some((label) => button[0].slice(0, button[0].indexOf(">")).includes(`aria-label="${label}"`)));
+  assert.ok(match, labels.join(" / "));
+  return match[0];
 }
 
 /** The opening tag of the button whose text is the given label. */
@@ -234,6 +244,12 @@ test("the footer shows the chosen symbol with its code and a star to keep it", (
   assert.match(starred, new RegExp(`aria-pressed="true"[^>]*aria-label="${words.symbolFavoriteRemove}"|aria-label="${words.symbolFavoriteRemove}"[^>]*aria-pressed="true"`));
 });
 
+test("the footer's star is filled only for a favourite", () => {
+  const star = (html) => buttonLabelled(element(html, 'data-palette="actions"'), [words.symbolFavoriteAdd, words.symbolFavoriteRemove]).match(/<svg[^>]*>/)[0];
+  assert.match(star(render(palette(INFANTRY))), /fill="none"/);
+  assert.match(star(render(palette(INFANTRY, { favorites: [INFANTRY.id] }))), /fill="currentColor"/);
+});
+
 test("the properties come in four sections chosen one at a time, the others hidden but kept", () => {
   const html = render(palette(INFANTRY, { tab: "properties" }));
   assert.equal(visibleText(element(html, `aria-label="${words.symbolSections}"`)), `${words.symbolIdentity} ${words.symbolStatus} ${words.symbolSectionModifiers} ${words.symbolTexts}`);
@@ -256,4 +272,16 @@ test("a symbol not yet placed has neither a base-symbol button nor an undo", () 
   const text = visibleText(render(palette(INFANTRY, { tab: "properties" })));
   assert.ok(!text.includes(words.symbolChangeBase));
   assert.ok(!text.includes(words.symbolRevert));
+});
+
+test("only the chosen properties section is displayed; the hidden ones are not drawn", () => {
+  const raw = renderRaw(palette(INFANTRY, { tab: "properties" }));
+  const css = [...raw.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((match) => match[1]).join("");
+  const sections = [...markup(raw).matchAll(/<div[^>]*data-symbol-section="([a-z]+)"[^>]*>/g)];
+  assert.equal(sections.length, 4);
+  for (const [tag, id] of sections) {
+    const name = tag.match(/class="([^"]*)"/)[1].split(" ").find((entry) => entry.startsWith("css-"));
+    const rule = css.match(new RegExp(`\\.${name}\\{([^}]*)\\}`))?.[1] ?? "";
+    assert.match(rule, id === "identity" ? /display:flex/ : /display:none/, id);
+  }
 });

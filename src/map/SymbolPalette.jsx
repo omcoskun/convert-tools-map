@@ -323,12 +323,11 @@ export default function SymbolPalette({ palette, open, onClose }) {
                 bgcolor: "transparent",
                 color: isFavorite ? COLORS.a : COLORS.muted,
                 cursor: "pointer",
-                "& svg": { fill: "currentColor" },
                 "&:hover": { bgcolor: COLORS.paper2, color: COLORS.a },
                 "&:focus-visible": { outline: `2px solid ${COLORS.focus}` },
               }}
             >
-              <Icon name="star" size={18} />
+              <Icon name="star" size={18} filled={isFavorite} />
             </Box>
           </Box>
         )}

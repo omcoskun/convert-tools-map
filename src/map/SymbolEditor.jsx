@@ -11,7 +11,9 @@ import { Box } from "../ui/index.js";
 import { ChoicePills, Glyph, Labeled, Spinner, actionSx, fieldSx, pillSx, sectionTitleSx, useSymbolDrag } from "./symbol-parts.jsx";
 import { ECHELONS, MOBILITIES, STATUSES, TEXT_FIELDS, TEXT_MAX, identityChoices, symbolOffers } from "./symbols.js";
 
-const sectionSx = { display: "flex", flexDirection: "column", gap: 1.5, mt: 1.5 };
+// A section box's flex display would override its hidden attribute, so the
+// display follows the chosen section too.
+const sectionSx = (shown) => ({ display: shown ? "flex" : "none", flexDirection: "column", gap: 1.5, mt: 1.5 });
 
 /**
  * @param {{
@@ -110,8 +112,8 @@ export default function SymbolEditor({ palette, labels }) {
         />
       </Box>
 
-      <Box data-symbol-section="identity" hidden={section !== "identity"} sx={sectionSx}>
-        <Box sx={{ mt: 1.5 }}>
+      <Box data-symbol-section="identity" hidden={section !== "identity"} sx={sectionSx(section === "identity")}>
+        <Box>
           <Box component="h3" sx={sectionTitleSx}>
             {text.symbolIdentity}
           </Box>
@@ -138,7 +140,7 @@ export default function SymbolEditor({ palette, labels }) {
         )}
       </Box>
 
-      <Box data-symbol-section="status" hidden={section !== "status"} sx={sectionSx}>
+      <Box data-symbol-section="status" hidden={section !== "status"} sx={sectionSx(section === "status")}>
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
           <Labeled label={text.symbolStatus} htmlFor="symbol-status">
             <Box component="select" id="symbol-status" value={offers.statuses.includes(settings.status) ? settings.status : "present"} onChange={(event) => change({ status: event.target.value })} sx={fieldSx}>
@@ -200,7 +202,7 @@ export default function SymbolEditor({ palette, labels }) {
         )}
       </Box>
 
-      <Box data-symbol-section="modifiers" hidden={section !== "modifiers"} sx={sectionSx}>
+      <Box data-symbol-section="modifiers" hidden={section !== "modifiers"} sx={sectionSx(section === "modifiers")}>
         {modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0 ? (
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
             {modifierLists["1"]?.length > 0 && (
@@ -247,7 +249,7 @@ export default function SymbolEditor({ palette, labels }) {
         </Box>
       </Box>
 
-      <Box data-symbol-section="texts" hidden={section !== "texts"} sx={sectionSx}>
+      <Box data-symbol-section="texts" hidden={section !== "texts"} sx={sectionSx(section === "texts")}>
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
           {TEXT_FIELDS.map(({ key, code }) => (
             <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>

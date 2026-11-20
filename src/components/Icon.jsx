@@ -167,13 +167,13 @@ const PATHS = {
  * @param {{ name: string, size?: number, strokeWidth?: number }} props
  *   name is a key of PATHS; size is the box in px (default 20).
  */
-export default function Icon({ name, size = 20, strokeWidth = 1.7 }) {
+export default function Icon({ name, size = 20, strokeWidth = 1.7, filled = false }) {
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
+      fill={filled ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth={strokeWidth}
       strokeLinecap="round"

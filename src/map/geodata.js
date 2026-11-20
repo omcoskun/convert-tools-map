@@ -104,7 +104,34 @@ function nameProperties(name) {
   return trimmed ? { name: trimmed.slice(0, NAME_MAX) } : {};
 }
 
-const feature = (geometry, name) => ({ type: "Feature", properties: nameProperties(name), geometry });
+const feature = (geometry, name, extra = {}) => ({ type: "Feature", properties: { ...nameProperties(name), ...extra }, geometry });
+
+const NAME_KEYS = ["name", "title", "Name"];
+const PROPERTY_MAX = 12;
+const KEY_MAX = 60;
+const VALUE_MAX = 200;
+
+/**
+ * A GeoJSON feature's plain properties besides its name, for its card: at most
+ * PROPERTY_MAX finite numbers, booleans and non-empty texts (trimmed, cut to
+ * VALUE_MAX), in their order. Nested values and over-long keys are left out.
+ */
+function plainProperties(properties, nameKey) {
+  const kept = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(properties)) {
+    if (count >= PROPERTY_MAX) break;
+    if (key === nameKey || key === "name" || key === "__proto__" || key.length > KEY_MAX) continue;
+    let plain;
+    if (typeof value === "number") plain = Number.isFinite(value) ? value : undefined;
+    else if (typeof value === "boolean") plain = value;
+    else if (typeof value === "string") plain = value.trim().slice(0, VALUE_MAX) || undefined;
+    if (plain === undefined) continue;
+    kept[key] = plain;
+    count += 1;
+  }
+  return kept;
+}
 
 function readGeoJson(content) {
   let data;
@@ -121,9 +148,12 @@ function readGeoJson(content) {
   if (entries.length > MAX_FEATURES) throw new GeodataError("tooMany");
   const features = [];
   for (const entry of entries) {
-    const properties = entry?.properties ?? {};
-    const name = properties.name ?? properties.title ?? properties.Name;
-    for (const geometry of cleanGeometry(entry?.geometry)) features.push(feature(geometry, name));
+    const given = entry?.properties;
+    const properties = given && typeof given === "object" && !Array.isArray(given) ? given : {};
+    const nameKey = NAME_KEYS.find((key) => properties[key] != null);
+    const name = nameKey ? properties[nameKey] : undefined;
+    const extra = plainProperties(properties, nameKey);
+    for (const geometry of cleanGeometry(entry?.geometry)) features.push(feature(geometry, name, extra));
   }
   return features;
 }

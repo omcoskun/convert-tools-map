@@ -14,6 +14,7 @@ import {
   galleryKey,
   gallerySections,
   symbolCode,
+  tabAfterChoice,
   toggleFavorite,
 } from "../src/map/symbol-gallery.js";
 
@@ -135,4 +136,11 @@ test("favourite symbols come in the stored order, without the ones the catalogue
   const icons = [{ id: "a" }, { id: "b" }, { id: "c" }];
   assert.deepEqual(favoriteIcons(icons, ["c", "x", "a"]).map((icon) => icon.id), ["c", "a"]);
   assert.deepEqual(favoriteIcons(icons, undefined), []);
+});
+
+test("a tile chosen for a placed symbol goes back to its properties; otherwise the tab stays", () => {
+  for (const tab of ["favorites", "units", "equipment", "search"]) assert.equal(tabAfterChoice(tab, true), "properties", tab);
+  assert.equal(tabAfterChoice("units", false), "units");
+  assert.equal(tabAfterChoice("search", false), "search");
+  assert.equal(tabAfterChoice("properties", false), "properties");
 });

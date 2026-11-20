@@ -120,6 +120,17 @@ export function symbolCode(icon) {
   return icon.id.replace(/#\d+$/, "");
 }
 
+/**
+ * The tab after a tile is chosen: a placed symbol being edited goes back to its
+ * properties, which show the new base symbol; otherwise the gallery stays.
+ * @param {string} tab
+ * @param {boolean} editing
+ * @returns {string}
+ */
+export function tabAfterChoice(tab, editing) {
+  return editing ? "properties" : tab;
+}
+
 /** How many favourites one standard keeps. */
 export const MAX_FAVORITES = 60;
 
