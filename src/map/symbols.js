@@ -246,6 +246,27 @@ export function placedSymbol({ id, standardId, icon, draft }, { lng, lat }) {
 }
 
 /**
+ * Whether two placed symbols are drawn alike; their position and name do not
+ * count.
+ * @param {object | null} a
+ * @param {object | null} b
+ */
+export function sameSymbolLook(a, b) {
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  if (a.icon !== b.icon || a.sidc !== b.sidc || a.size !== b.size) return false;
+  const aSettings = a.settings ?? {};
+  const bSettings = b.settings ?? {};
+  for (const key of Object.keys(DEFAULT_SETTINGS)) {
+    if (aSettings[key] !== bSettings[key]) return false;
+  }
+  const aTexts = a.texts ?? {};
+  const bTexts = b.texts ?? {};
+  const keys = Object.keys(aTexts);
+  if (keys.length !== Object.keys(bTexts).length) return false;
+  return keys.every((key) => Object.hasOwn(bTexts, key) && aTexts[key] === bTexts[key]);
+}
+
+/**
  * The code milsymbol draws: it knows edition E as version 13 and 14, so
  * APP-6E's 16 (APP-06(E)(2)) is drawn as 14, as the fork's editor does.
  */

@@ -1,15 +1,17 @@
-// The symbol palette's properties tab: the preview of the chosen symbol, its
-// identity pills and every amplifier the standard offers (context, status,
-// echelon or mobility, the indicators, sector modifiers, size and texts). The
-// preview is dragged onto the map like a tile; with nothing chosen it is all
-// the tab shows.
-import Disclosure from "../components/Disclosure.jsx";
+// The symbol palette's properties tab: the preview of the chosen symbol and its
+// properties in four sections (identity, status, modifiers, texts) chosen one
+// at a time, with a new base symbol and an undo while a placed symbol is
+// edited. The preview is dragged onto the map like a tile; with nothing chosen
+// it is all the tab shows.
+import { useState } from "react";
 import Segmented from "../components/Segmented.jsx";
 import { useLanguage } from "../context.js";
 import { COLORS, MONO_FONT, PHONE, RADIUS, TYPE } from "../theme.js";
 import { Box } from "../ui/index.js";
-import { ChoicePills, Glyph, Labeled, Spinner, fieldSx, pillSx, sectionTitleSx, useSymbolDrag } from "./symbol-parts.jsx";
+import { ChoicePills, Glyph, Labeled, Spinner, actionSx, fieldSx, pillSx, sectionTitleSx, useSymbolDrag } from "./symbol-parts.jsx";
 import { ECHELONS, MOBILITIES, STATUSES, TEXT_FIELDS, TEXT_MAX, identityChoices, symbolOffers } from "./symbols.js";
+
+const sectionSx = { display: "flex", flexDirection: "column", gap: 1.5, mt: 1.5 };
 
 /**
  * @param {{
@@ -20,6 +22,7 @@ import { ECHELONS, MOBILITIES, STATUSES, TEXT_FIELDS, TEXT_MAX, identityChoices,
 export default function SymbolEditor({ palette, labels }) {
   const { text } = useLanguage();
   const { standard, catalog, ms, draft, icon, sidc, editing } = palette;
+  const [section, setSection] = useState("identity");
   const dragSymbol = useSymbolDrag(palette);
 
   const offers = icon ? symbolOffers(icon, standard) : null;
@@ -81,19 +84,44 @@ export default function SymbolEditor({ palette, labels }) {
 
       {preview}
 
-      <Box sx={{ mt: 1.5 }}>
-        <Box component="h3" sx={sectionTitleSx}>
-          {text.symbolIdentity}
+      {editing && (
+        <Box sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", mt: 1 }}>
+          <Box component="button" type="button" onClick={() => palette.chooseTab("units")} sx={actionSx}>
+            {text.symbolChangeBase}
+          </Box>
+          <Box component="button" type="button" onClick={palette.revertSelected} disabled={!palette.canRevert} sx={actionSx}>
+            {text.symbolRevert}
+          </Box>
         </Box>
-        <ChoicePills
-          label={text.symbolIdentity}
-          options={identityChoices(standard).map(({ value }) => ({ value, text: labels.identities[value] }))}
-          value={settings.identity}
-          onChoose={(value) => change({ identity: value })}
+      )}
+
+      <Box sx={{ mt: 1.5 }}>
+        <Segmented
+          label={text.symbolSections}
+          size="sm"
+          options={[
+            { value: "identity", label: text.symbolIdentity },
+            { value: "status", label: text.symbolStatus },
+            { value: "modifiers", label: text.symbolSectionModifiers },
+            { value: "texts", label: text.symbolTexts },
+          ]}
+          value={section}
+          onChange={setSection}
         />
       </Box>
 
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 2 }}>
+      <Box data-symbol-section="identity" hidden={section !== "identity"} sx={sectionSx}>
+        <Box sx={{ mt: 1.5 }}>
+          <Box component="h3" sx={sectionTitleSx}>
+            {text.symbolIdentity}
+          </Box>
+          <ChoicePills
+            label={text.symbolIdentity}
+            options={identityChoices(standard).map(({ value }) => ({ value, text: labels.identities[value] }))}
+            value={settings.identity}
+            onChoose={(value) => change({ identity: value })}
+          />
+        </Box>
         {offers.contexts.length > 1 && (
           <Box>
             <Box component="h3" sx={sectionTitleSx}>
@@ -108,6 +136,9 @@ export default function SymbolEditor({ palette, labels }) {
             />
           </Box>
         )}
+      </Box>
+
+      <Box data-symbol-section="status" hidden={section !== "status"} sx={sectionSx}>
         <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
           <Labeled label={text.symbolStatus} htmlFor="symbol-status">
             <Box component="select" id="symbol-status" value={offers.statuses.includes(settings.status) ? settings.status : "present"} onChange={(event) => change({ status: event.target.value })} sx={fieldSx}>
@@ -167,7 +198,10 @@ export default function SymbolEditor({ palette, labels }) {
             </Box>
           </Box>
         )}
-        {(modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0) && (
+      </Box>
+
+      <Box data-symbol-section="modifiers" hidden={section !== "modifiers"} sx={sectionSx}>
+        {modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0 ? (
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
             {modifierLists["1"]?.length > 0 && (
               <Labeled label={text.symbolModifier1} htmlFor="symbol-modifier-1">
@@ -194,6 +228,10 @@ export default function SymbolEditor({ palette, labels }) {
               </Labeled>
             )}
           </Box>
+        ) : (
+          <Box component="p" sx={{ m: 0, color: COLORS.muted, fontSize: TYPE.small }}>
+            {text.symbolNoModifiers}
+          </Box>
         )}
         <Box>
           <Box component="h3" sx={sectionTitleSx}>
@@ -207,24 +245,25 @@ export default function SymbolEditor({ palette, labels }) {
             onChange={palette.chooseSize}
           />
         </Box>
-        <Disclosure title={text.symbolTexts} defaultOpen={Object.keys(draft.texts).length > 0}>
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
-            {TEXT_FIELDS.map(({ key, code }) => (
-              <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>
-                <Box
-                  component="input"
-                  id={`symbol-text-${key}`}
-                  type="text"
-                  inputMode={key === "direction" ? "decimal" : undefined}
-                  maxLength={TEXT_MAX}
-                  value={draft.texts[key] ?? ""}
-                  onChange={(event) => palette.changeText(key, event.target.value)}
-                  sx={fieldSx}
-                />
-              </Labeled>
-            ))}
-          </Box>
-        </Disclosure>
+      </Box>
+
+      <Box data-symbol-section="texts" hidden={section !== "texts"} sx={sectionSx}>
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
+          {TEXT_FIELDS.map(({ key, code }) => (
+            <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>
+              <Box
+                component="input"
+                id={`symbol-text-${key}`}
+                type="text"
+                inputMode={key === "direction" ? "decimal" : undefined}
+                maxLength={TEXT_MAX}
+                value={draft.texts[key] ?? ""}
+                onChange={(event) => palette.changeText(key, event.target.value)}
+                sx={fieldSx}
+              />
+            </Labeled>
+          ))}
+        </Box>
       </Box>
     </>
   );

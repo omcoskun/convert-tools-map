@@ -523,7 +523,12 @@
       "symbolGroupSubsurface": "Su altı",
       "symbolFavoriteAdd": "Favorilere ekle",
       "symbolFavoriteRemove": "Favorilerden çıkar",
-      "symbolFavoritesEmpty": "Henüz favori yok. Bir sembol seçip alttaki yıldızla ekleyin."
+      "symbolFavoritesEmpty": "Henüz favori yok. Bir sembol seçip alttaki yıldızla ekleyin.",
+      "symbolSections": "Özellik bölümleri",
+      "symbolSectionModifiers": "Değiştiriciler",
+      "symbolNoModifiers": "Bu sembolün sektör değiştiricisi yok.",
+      "symbolChangeBase": "Temel sembolü değiştir",
+      "symbolRevert": "Değişiklikleri geri al"
     },
     "units": {
       "millimetre": "Milimetre",
@@ -1106,7 +1111,12 @@
       "symbolGroupSubsurface": "Subsurface",
       "symbolFavoriteAdd": "Add to favourites",
       "symbolFavoriteRemove": "Remove from favourites",
-      "symbolFavoritesEmpty": "No favourites yet. Choose a symbol and add it with the star below."
+      "symbolFavoritesEmpty": "No favourites yet. Choose a symbol and add it with the star below.",
+      "symbolSections": "Property sections",
+      "symbolSectionModifiers": "Modifiers",
+      "symbolNoModifiers": "This symbol has no sector modifiers.",
+      "symbolChangeBase": "Change the base symbol",
+      "symbolRevert": "Undo the changes"
     },
     "units": {
       "millimetre": "Millimetre",

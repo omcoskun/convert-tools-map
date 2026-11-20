@@ -12,6 +12,7 @@ import {
   drawingSidc,
   identityChoices,
   placedSymbol,
+  sameSymbolLook,
   searchSymbols,
   settingsForStandard,
   symbolOffers,
@@ -192,4 +193,21 @@ test("on the map a symbol and its texts get a white outline, so they read on dar
   assert.deepEqual(plain, { size: 48, standard: "APP6", uniqueDesignation: "2/14", direction: 45 });
   const onMap = symbolOptions({ standard: "2525c", size: "small" }, { onMap: true });
   assert.deepEqual(onMap, { size: 24, standard: "2525", outlineWidth: 2, outlineColor: "#ffffff", infoOutlineWidth: 3, infoOutlineColor: "#ffffff" });
+});
+
+test("two placed symbols look the same when their symbol, code, size, settings and texts match", () => {
+  const base = { id: "s1", icon: "10-121100", sidc: "10031000001211000000", size: "medium", settings: { ...DEFAULT_SETTINGS }, texts: { uniqueDesignation: "1" }, lng: 1, lat: 2 };
+  assert.equal(sameSymbolLook(base, { ...base, settings: { ...DEFAULT_SETTINGS }, texts: { uniqueDesignation: "1" } }), true);
+  assert.equal(sameSymbolLook(base, { ...base, lng: 30, lat: 40, name: "Other" }), true, "position and name are not the look");
+  assert.equal(sameSymbolLook(null, base), false);
+});
+
+test("a changed symbol, code, size, setting or text is another look", () => {
+  const base = { icon: "10-121100", sidc: "10031000001211000000", size: "medium", settings: { ...DEFAULT_SETTINGS }, texts: {} };
+  assert.equal(sameSymbolLook(base, { ...base, icon: "10-120500" }), false);
+  assert.equal(sameSymbolLook(base, { ...base, sidc: "10061000001211000000" }), false);
+  assert.equal(sameSymbolLook(base, { ...base, size: "large" }), false);
+  assert.equal(sameSymbolLook(base, { ...base, settings: { ...DEFAULT_SETTINGS, hq: true } }), false);
+  assert.equal(sameSymbolLook(base, { ...base, texts: { quantity: "3" } }), false);
+  assert.equal(sameSymbolLook({ ...base, texts: { quantity: "3" } }, base), false);
 });

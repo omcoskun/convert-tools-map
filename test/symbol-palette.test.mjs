@@ -39,6 +39,7 @@ function palette(icon, overrides = {}) {
     count: 0,
     tab: "units",
     favorites: [],
+    canRevert: false,
     ...overrides,
     chooseStandard: noop,
     chooseIcon: noop,
@@ -55,6 +56,7 @@ function palette(icon, overrides = {}) {
     toggleFavorite: noop,
     placeWith: noop,
     dropSymbol: noop,
+    revertSelected: noop,
   };
 }
 
@@ -68,6 +70,13 @@ function render(value) {
       ),
     ),
   );
+}
+
+/** The opening tag of the button whose text is the given label. */
+function buttonNamed(html, label) {
+  const match = [...markup(html).matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].find((button) => visibleText(button[1]) === label);
+  assert.ok(match, label);
+  return match[0].slice(0, match[0].indexOf(">") + 1);
 }
 
 test("the palette offers all seven standards and previews the chosen symbol with its SIDC", () => {
@@ -223,4 +232,28 @@ test("the footer shows the chosen symbol with its code and a star to keep it", (
   assert.match(footer, new RegExp(`aria-pressed="false"[^>]*aria-label="${words.symbolFavoriteAdd}"|aria-label="${words.symbolFavoriteAdd}"[^>]*aria-pressed="false"`));
   const starred = element(render(palette(INFANTRY, { favorites: [INFANTRY.id] })), 'data-palette="actions"');
   assert.match(starred, new RegExp(`aria-pressed="true"[^>]*aria-label="${words.symbolFavoriteRemove}"|aria-label="${words.symbolFavoriteRemove}"[^>]*aria-pressed="true"`));
+});
+
+test("the properties come in four sections chosen one at a time, the others hidden but kept", () => {
+  const html = render(palette(INFANTRY, { tab: "properties" }));
+  assert.equal(visibleText(element(html, `aria-label="${words.symbolSections}"`)), `${words.symbolIdentity} ${words.symbolStatus} ${words.symbolSectionModifiers} ${words.symbolTexts}`);
+  const sections = [...html.matchAll(/<div[^>]*data-symbol-section="([a-z]+)"[^>]*>/g)];
+  assert.deepEqual(sections.map((match) => match[1]), ["identity", "status", "modifiers", "texts"]);
+  assert.deepEqual(sections.map((match) => /\shidden=""/.test(match[0])), [false, true, true, true]);
+  assert.ok(element(html, 'data-symbol-section="status"').includes('id="symbol-status"'));
+  assert.equal([...element(html, 'data-symbol-section="texts"').matchAll(/id="symbol-text-/g)].length, 12);
+});
+
+test("a placed symbol offers a new base symbol and an undo that waits for a change", () => {
+  const unchanged = render(palette(INFANTRY, { tab: "properties", editing: true, count: 1 }));
+  assert.ok(visibleText(unchanged).includes(words.symbolChangeBase));
+  assert.match(buttonNamed(unchanged, words.symbolRevert), /disabled=""/);
+  const changed = render(palette(INFANTRY, { tab: "properties", editing: true, count: 1, canRevert: true }));
+  assert.doesNotMatch(buttonNamed(changed, words.symbolRevert), /disabled=""/);
+});
+
+test("a symbol not yet placed has neither a base-symbol button nor an undo", () => {
+  const text = visibleText(render(palette(INFANTRY, { tab: "properties" })));
+  assert.ok(!text.includes(words.symbolChangeBase));
+  assert.ok(!text.includes(words.symbolRevert));
 });

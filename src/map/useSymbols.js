@@ -19,6 +19,7 @@ import {
   cleanSymbols,
   composeSidc,
   placedSymbol,
+  sameSymbolLook,
   settingsForStandard,
   symbolStandard,
 } from "./symbols.js";
@@ -236,9 +237,12 @@ export default function useSymbols({ map, markerLabel }) {
 
   const symbolsRef = useRef(symbols);
   symbolsRef.current = symbols;
+  // The selected symbol as it was when it was clicked, for the undo.
+  const originalRef = useRef(null);
   const selectSymbol = useCallback((id) => {
     const symbol = symbolsRef.current.find((entry) => entry.id === id);
     if (!symbol) return;
+    originalRef.current = symbol;
     setPlacing(false);
     revealRef.current = id;
     setSelectedId(id);
@@ -246,6 +250,17 @@ export default function useSymbols({ map, markerLabel }) {
     setDraft({ iconId: symbol.icon, settings: symbol.settings, texts: symbol.texts, size: symbol.size });
     setTab("properties");
     setOpen(true);
+  }, []);
+
+  // Puts the selected symbol back as it was when it was clicked, keeping the
+  // position it has been dragged to since.
+  const revertSelected = useCallback(() => {
+    const original = originalRef.current;
+    if (!original || original.id !== live.current.selectedId) return;
+    setSymbols((list) => list.map((symbol) => (symbol.id === original.id ? { ...original, lng: symbol.lng, lat: symbol.lat } : symbol)));
+    const restored = { iconId: original.icon, settings: original.settings, texts: original.texts, size: original.size };
+    live.current.draft = restored;
+    setDraft(restored);
   }, []);
 
   // A symbol just placed or chosen on the map that the palette covers is
@@ -383,6 +398,9 @@ export default function useSymbols({ map, markerLabel }) {
     };
   }, []);
 
+  const selected = symbols.find((symbol) => symbol.id === selectedId) ?? null;
+  const canRevert = Boolean(selected && originalRef.current?.id === selected.id && !sameSymbolLook(selected, originalRef.current));
+
   return {
     open,
     togglePalette,
@@ -414,5 +432,7 @@ export default function useSymbols({ map, markerLabel }) {
     toggleFavorite,
     tab,
     chooseTab,
+    canRevert,
+    revertSelected,
   };
 }
