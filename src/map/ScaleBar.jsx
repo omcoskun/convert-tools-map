@@ -1,16 +1,17 @@
-// The map's scale bar: an Apple-style bar of two alternating segments with
-// the round length that fits in 96 px (scale.js). Its numbers sit centred on
-// the ticks, the unit hangs after the last one, and the middle number drops
-// out when the bar is too short for it. It shows while the map zooms and
-// fades out 1.5 s later; it stays while hovered, focused or pinned, and a
-// click cycles metric, nautical and imperial. The camera moves every frame,
-// so the widths and labels are written to the DOM through refs, never to
-// React state. The parent positions it.
+// The map's scale bar: an Apple-style bar of two alternating segments on a
+// small plate in the map's tone, with the round length that fits in 96 px
+// (scale.js). Its numbers sit centred on the ticks, the unit hangs after the
+// last one, and the middle number drops out when the bar is too short for it.
+// It shows while the map zooms and fades out 1.5 s later; it stays while
+// hovered, focused or pinned, and a click cycles metric, nautical and
+// imperial. The camera moves every frame, so the widths and labels are
+// written to the DOM through refs, never to React state. The parent positions
+// it.
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLanguage } from "../context.js";
 import { COLORS, MONO_FONT, MOTION, PHONE, RADIUS, TYPE } from "../theme.js";
 import { Box, visuallyHidden } from "../ui/index.js";
-import { SCALE_UNITS, niceScale } from "./scale.js";
+import { SCALE_UNITS, niceScale, scaleInks } from "./scale.js";
 
 const MAX_PX = 96;
 const FADE_DELAY_MS = 1500;
@@ -18,23 +19,6 @@ const FADE_DELAY_MS = 1500;
 // between two labels.
 const CHAR_PX = 7;
 const LABEL_GAP = 6;
-
-// The bar sits on the map, not on a surface, so its colours follow the map's
-// tone and not the interface palette.
-const INKS = {
-  light: { ink: "#18212f", halo: "rgba(255, 255, 255, 0.92)" },
-  dark: { ink: "#f2f4f7", halo: "rgba(8, 12, 18, 0.85)" },
-};
-
-function haloShadow(color) {
-  return [
-    `-1px 0 0 ${color}`,
-    `1px 0 0 ${color}`,
-    `0 -1px 0 ${color}`,
-    `0 1px 0 ${color}`,
-    `0 0 3px ${color}`,
-  ].join(", ");
-}
 
 /**
  * @param {{
@@ -61,7 +45,7 @@ export default function ScaleBar({ subscribeView, measureScale, unit, onUnitChan
   const heldRef = useRef(false);
   const pinnedRef = useRef(pinned);
   pinnedRef.current = pinned;
-  const palette = tone === "light" ? INKS.light : INKS.dark;
+  const palette = scaleInks(tone);
 
   const update = useCallback(() => {
     const root = rootRef.current;
@@ -168,17 +152,17 @@ export default function ScaleBar({ subscribeView, measureScale, unit, onUnitChan
       onClick={cycle}
       sx={{
         display: "block",
-        // Even sides keep the bar centred; the unit hangs into the right one.
-        p: "6px 28px",
-        border: 0,
-        bgcolor: "transparent",
+        // The right side is wider: the unit hangs into it.
+        p: "4px 40px 5px 10px",
+        border: `1px solid ${palette.edge}`,
+        bgcolor: palette.plate,
+        borderRadius: `${RADIUS.control}px`,
         font: "inherit",
         fontFamily: MONO_FONT,
         fontSize: TYPE.label,
         fontWeight: 650,
         fontVariantNumeric: "tabular-nums",
         color: palette.ink,
-        textShadow: haloShadow(palette.halo),
         cursor: "pointer",
         opacity: 0,
         pointerEvents: "none",
@@ -188,7 +172,7 @@ export default function ScaleBar({ subscribeView, measureScale, unit, onUnitChan
         "&.is-tight .scale-mid": { visibility: "hidden" },
         "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 0, borderRadius: `${RADIUS.control}px` },
         "@media (prefers-reduced-motion: reduce)": { transition: "none" },
-        [PHONE]: { p: "10px 28px 10px 12px" },
+        [PHONE]: { p: "8px 40px 8px 12px" },
       }}
     >
       {/* The name is the reading ("500 m") and then the action, so it holds
@@ -209,13 +193,12 @@ export default function ScaleBar({ subscribeView, measureScale, unit, onUnitChan
           component="span"
           sx={{
             display: "flex",
-            height: 4,
-            boxShadow: `0 0 0 1px ${palette.halo}`,
-            textShadow: "none",
+            height: 5,
+            boxShadow: `0 0 0 1px ${palette.ink}`,
           }}
         >
           <Box component="span" sx={{ flex: 1, bgcolor: palette.ink }} />
-          <Box component="span" sx={{ flex: 1, bgcolor: palette.halo }} />
+          <Box component="span" sx={{ flex: 1, bgcolor: palette.paper }} />
         </Box>
       </Box>
     </Box>

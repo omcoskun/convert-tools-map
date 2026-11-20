@@ -4,6 +4,19 @@
 
 export const SCALE_UNITS = Object.freeze(["metric", "nautical", "imperial"]);
 
+// The scale bar's colours by the map's tone. The bar sits on the map, so a
+// semi-opaque plate under it keeps the numbers and both segments readable
+// over any ground; the bar is outlined in the ink colour.
+export const SCALE_INKS = Object.freeze({
+  light: Object.freeze({ ink: "#18212f", paper: "#ffffff", plate: "rgba(255, 255, 255, 0.86)", edge: "rgba(24, 33, 47, 0.22)" }),
+  dark: Object.freeze({ ink: "#f2f4f7", paper: "#111821", plate: "rgba(10, 14, 20, 0.76)", edge: "rgba(255, 255, 255, 0.22)" }),
+});
+
+/** The scale bar's colours for a map tone: dark ink on the light map, light ink on the dark map and the imagery. */
+export function scaleInks(tone) {
+  return tone === "dark" || tone === "imagery" ? SCALE_INKS.dark : SCALE_INKS.light;
+}
+
 const METRES_PER_NAUTICAL_MILE = 1852;
 const METRES_PER_MILE = 1609.344;
 const METRES_PER_FOOT = 0.3048;
