@@ -20,7 +20,13 @@ const DYNAMIC_TEXT_KEYS = [
   {
     reader: path.join("shell", "TopBar.jsx"),
     table: path.join("tools", "index.js"),
-    keys: ["navMeasure", "navPositions", "navCrs", "navLength", "navTriaxial", "navReference"],
+    keys: ["navMap", "navLength", "navTriaxial", "navReference"],
+  },
+  {
+    // The map's tool rail names the workspace tools.
+    reader: "App.jsx",
+    table: path.join("tools", "index.js"),
+    keys: ["navMeasure", "navPositions", "navCrs"],
   },
 ];
 

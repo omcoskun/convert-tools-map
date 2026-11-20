@@ -67,11 +67,13 @@ JavaScript çekirdeğinde ölçülen en büyük farklar (Java aynı vektörleri 
 
 ## Site
 
-`npm run dev` ile `http://localhost:3008/` adresinde açılır. Üst çubukta altı
-araç vardır; her biri kendi adresiyle açılır:
+`npm run dev` ile `http://localhost:3008/` adresinde açılır. Site haritayla
+açılır. Üst çubukta Harita ile üç sayfa aracı, haritanın solundaki araç
+şeridinde harita araçları vardır; her araç kendi adresiyle açılır:
 
 | Araç | Adres | Ne gösterir |
 |---|---|---|
+| Harita | `#map` | Araçsız harita; araç şeridi, katmanlar, semboller ve veri |
 | Ölçüm | `#measure` | İki nokta (ters problem), azimut + mesafe (düz problem) ve rota; WGS 84, GRS 80, küre veya özel (prolate dahil) model; bütün birimler ve jeodezik büyüklükler; neredeyse antipodal uçlarda azimut ve alan yalnız anlamlı basamaklarıyla (≈) ve belirsizliğiyle |
 | Konum | `#positions` | DD, DMS, DDM, MGRS, UTM/UPS, GARS ve GEOREF arasında çeviri; çıktı hassasiyetleri ve MGRS karesinin köşesi veya merkezi |
 | CRS | `#crs` | Desteklenen EPSG sistemleri arasında koordinat dönüşümü |
@@ -80,15 +82,20 @@ araç vardır; her biri kendi adresiyle açılır:
 | Referans | `#reference` | Doğruluk, WGS 84 sabitleri, desteklenen CRS'ler, birim tanımları ve hata kodları |
 
 - **Çalışma alanı.** Ölçüm, Konum ve CRS tek bir haritanın üzerinde çalışır.
-  Harita üst çubuğun altındaki bütün pencereyi kaplar. Girdiler sol üstteki
-  girdi panelinde, sonuç alt ortadaki sonuç şeridinde durur. Panel
-  daraltılabilir. "Ayrıntılar" düğmesi şeridin üstünde bir çekmece açar:
+  Harita üst çubuğun altındaki bütün pencereyi kaplar. Soldaki araç şeridi
+  bu üç aracı ve Sembol ile Veri panellerini açıp kapatır. Açık aracın
+  girdileri şeridin yanındaki girdi panelinde, sonucu alttaki sonuç şeridinde
+  durur. Panel daraltılır ya da kapatılır; kapalı aracın çizimi haritadan
+  kalkar, açılınca olduğu gibi döner. Sembol ve Veri panelleri açık aracın
+  panelinin yanına yerleşir (1180 px'ten dar pencerede onun üstüne), sonuç
+  şeridi, ipuçları ve ölçek çubuğu bunların sağında kalır. Bir panel açılıp
+  kapanınca harita ekranda yerinden oynamaz. "Ayrıntılar" düğmesi şeridin üstünde bir çekmece açar:
   bütün birimler, ek büyüklükler, model ve kütüphane çağrısı oradadır. Sağdaki
   denetimler yakınlaştırır, sonuca sığdırır, tüm dünyayı gösterir ve haritayı
   büyütür. 2D/3D seçici düz harita ile küre/perspektif arasında geçiş yapar;
   pusula kuzeye döndürüp eğimi sıfırlar. 3D görünümde sağ tuşla sürükleme
   eğim ve yönü değiştirir. Büyütülmüş haritada paneller gizlenir. Telefonda (760 px'in altı)
-  panel ve şerit ekranın altındaki bir sayfaya taşınır. Sayfanın tepesinde
+  açık aracın paneli ve şeridi ekranın altındaki bir sayfaya taşınır. Sayfanın tepesinde
   ana değeri gösteren koyu bir şerit vardır ve sayfa tutamaçla büyütülüp
   küçültülür.
 - **Sayfa araçları.** Uzunluk, Üç eksenli ve Referans haritasız, ortalanmış
@@ -112,7 +119,8 @@ araç vardır; her biri kendi adresiyle açılır:
   Koordinat çiftlerinde virgül iki değeri ayırdığı için çift her dilde ondalık
   noktayla yazılır.
 - **Adresler.** `#<araç>` açık aracı belirtir. Adres bir araç belirtmiyorsa
-  ilk açılışta Ölçüm açılır, sonradan değişirse açık araç olduğu gibi kalır.
+  ilk açılışta araçsız harita (`#map`) açılır, sonradan değişirse açık araç
+  olduğu gibi kalır.
   Eski `#distance` adresi Ölçüm'ü açar ve `#measure` olarak yeniden yazılır.
   `#reference/<bölüm>` Referans'ı o bölümde açar (`accuracy`, `wgs84`, `crs`,
   `units`, `errors`).
@@ -161,7 +169,8 @@ Değişmeyen kurallar:
   yıldızlar yerel bir canvas'ta iki küçük, kendini tekrarlayan desene bir kez
   çizilir ve kamera dönünce, kuzeye-güneye kayınca ya da eğilince kürenin
   çok gerisindeymiş gibi kayar (kare başına üç dolgu; sürekli animasyon veya
-  ek görsel isteği yoktur, "hareketi azalt" ayarında yerinde durur).
+  ek görsel isteği yoktur, "hareketi azalt" ayarında yerinde durur). Küre
+  ekranı kaplayınca yıldızlar gizlenir ve çizilmez.
   Kürenin kenarında atmosfer efekti bulunur.
   3D'de uzaklaşma sınırı ekranın panellerden kalan alanına ve enleme göre
   hesaplanır; küre bu alana sığdığında daha fazla uzaklaşılamaz. 2D'de düz
@@ -211,19 +220,22 @@ Değişmeyen kurallar:
   USGS, EU-DEM ve diğerleri, tam liste bağlantının arkasında). Tepe gölgesi
   her altlıkta yolların, sınırların ve adların altına çizilir. 3D arazi
   yalnız küre (3D) görünümünde çalışır; yükseklik abartısı 1×, 1,5× veya 2×
-  seçilir. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
+  seçilir. 3D arazinin ağı bir düzey kaba (512 px) karolardan kurulur, dörtte
+  bir karo yeter; tepe gölgesi 256 px karolarla aynı keskinlikte kalır. Açılınca harita gerekirse 3D görünüme geçer ve eğilir.
 - Katmanlar: 3D binalar (varsayılan açık; küre görünümünde, yakınlaştırma
   14'ten itibaren, OpenFreeMap karolarındaki bina yüksekliklerinden),
   enlem/boylam ızgarası (aralığı yakınlaştırma düzeyini izler) ve MGRS ızgara
   bölgeleri (bu ikisi varsayılan kapalı).
-- Askerî semboller (kontrol sütunundaki çerçeve düğmesi): APP-6A, APP-6B,
+- Askerî semboller (araç şeridindeki Sembol düğmesi): APP-6A, APP-6B,
   APP-6D, APP-6E, MIL-STD-2525C, 2525D ve 2525E standartlarında sembol
   paleti. Katalogda ad ya da kodla aranır ve kategoriye göre süzülür; kimlik,
   bağlam (gerçek/tatbikat/simülasyon), durum, kademe ya da hareket
   kabiliyeti, karargâh / görev kuvveti / aldatma göstergeleri, sektör
   niteleyicileri (sayısal standartlarda), 12 metin alanı ve boyut seçilir;
-  SIDC önizlemenin altında yazar. "Haritaya yerleştir" ile haritaya
-  tıklanan yere konur; sembol sürüklenerek taşınır, tıklanınca palette
+  SIDC önizlemenin altında yazar. Bir kutucuk ya da önizleme sürüklenip
+  haritaya bırakılır, ya da "Haritaya yerleştir" (veya kutucuğa çift tıklama)
+  ile haritaya tıklanan yere konur; konan sembol seçili kalmaz, palet yeni
+  sembolde kalır. Sembol sürüklenerek taşınır, tıklanınca palette
   düzenlenir (değişiklik hemen uygulanır), Delete ile ya da paletten
   silinir. Semboller tarayıcıda hatırlanır (`localStorage`, en çok 500).
   Çizim sahibinin milsymbol çatalıyla yapılır (`github:omcoskun/milsymbol`,
@@ -233,7 +245,7 @@ Değişmeyen kurallar:
   --data DİZİN` çıktısından `node scripts/symbol-catalog.mjs DİZİN` ile
   üretilir; APP-6E kendi kataloğu olmadığı için 2525E'ninkini kullanır ve
   SIDC'si 16 sürümüyle yazılır.
-- Veri ve görüntü (kontrol sütunundaki indirme düğmesi, ya da dosyaları
+- Veri ve görüntü (araç şeridindeki Veri düğmesi, ya da dosyaları
   haritaya bırakmak): GeoJSON, GPX (yol noktaları, rotalar, izler) ve KML
   (nokta, çizgi, delikli alan, MultiGeometry, gx:Track) dosyaları açılır;
   her dosya kendi renginde çizilir, gizlenir, ona yakınlaşılır ya da

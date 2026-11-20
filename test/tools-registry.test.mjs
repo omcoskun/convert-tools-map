@@ -8,7 +8,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { readJson } from "./support/files.mjs";
 
-const { DEFAULT_TOOL, TOOLS, resolveTool } = await import("../src/tools/index.js");
+const { DEFAULT_TOOL, MAP_ID, NAV, TOOLS, isWorkspace, resolveTool } = await import("../src/tools/index.js");
 const { sectionOf } = await import("../src/lib/address.js");
 const { default: Icon } = await import("../src/components/Icon.jsx");
 
@@ -21,9 +21,20 @@ test("the tools are measure, positions, crs, length, triaxial and reference, in 
   );
 });
 
-test("measure is the default tool", () => {
-  assert.equal(DEFAULT_TOOL, "measure");
-  assert.ok(TOOLS.some((tool) => tool.id === DEFAULT_TOOL));
+test("the app opens on the map with no tool open: #map is the default address", () => {
+  assert.equal(MAP_ID, "map");
+  assert.equal(DEFAULT_TOOL, MAP_ID);
+  assert.equal(resolveTool("map"), "map");
+  assert.ok(isWorkspace("map"));
+  assert.deepEqual(TOOLS.filter((tool) => isWorkspace(tool.id)).map((tool) => tool.id), ["measure", "positions", "crs"]);
+  assert.equal(isWorkspace("length"), false);
+});
+
+test("the navigation is the map, where the map tools open, then the page tools", () => {
+  assert.deepEqual(NAV.map((entry) => entry.id), ["map", "length", "triaxial", "reference"]);
+  for (const entry of NAV) {
+    for (const language of Object.keys(lang)) assert.equal(typeof lang[language].text[entry.labelKey], "string", `${language} ${entry.labelKey}`);
+  }
 });
 
 test("resolveTool keeps known ids, opens measure for the old #distance and rejects the rest", () => {

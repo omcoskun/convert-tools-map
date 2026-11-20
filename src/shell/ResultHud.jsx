@@ -18,12 +18,18 @@ import { useWidgetRef, useWorkspace } from "./workspace-context.js";
 // widget. The parts are placed with CSS only (order, display: contents),
 // so the details are rendered once.
 
-// From 1100 px the input widget sits beside the card: the card never reaches
-// it, and is centred on the window when that clears it, else just right of it.
+// From 1100 px the input widget sits beside the card, right of the tool
+// rail: the card never reaches it, and is centred on the window when that
+// clears it, else just right of it. --dock-edge (WorkspaceLayout) is where
+// the input widget, or a panel docked beside it, ends.
 const besideInput = (px) => {
-  const width = `min(${px}px, calc(100% - ${WORKSPACE.inputWidth} - 64px))`;
-  return { width, left: `max(50%, calc(${WORKSPACE.inputWidth} + ${2 * WORKSPACE.inset}px + ${width} / 2))` };
+  const width = `min(${px}px, calc(100% - var(--dock-edge) - 40px))`;
+  return { width, left: `max(50%, calc(var(--dock-edge) + ${WORKSPACE.inset - 8}px + ${width} / 2))` };
 };
+// A docked panel (the symbols, the data) runs down the whole column, so from
+// the phone layout up the card moves beside it.
+const BESIDE_DOCK = "[data-docked='true'] &";
+const DESKTOP_UP = "@media (min-width: 760px)";
 
 const desktop = {
   position: "absolute",
@@ -37,6 +43,7 @@ const desktop = {
   pointerEvents: "none",
   "& > *": { pointerEvents: "auto" },
   "@media (min-width: 1100px)": besideInput(640),
+  [BESIDE_DOCK]: { [DESKTOP_UP]: besideInput(640) },
 };
 
 // compact is false or the width in px of the one-row card of a lone figure.
@@ -47,6 +54,7 @@ const hudSx = (expanded, compact) => ({
     bottom: WORKSPACE.strip,
     width: `min(${compact}px, calc(100% - 48px))`,
     "@media (min-width: 1100px)": besideInput(compact),
+    [BESIDE_DOCK]: { [DESKTOP_UP]: besideInput(compact) },
   }),
   "& .hud-notices": { display: "flex", flexDirection: "column", gap: 1, "& > *": { boxShadow: SHADOW.float } },
   "& .hud-box": {

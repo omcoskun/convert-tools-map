@@ -1,8 +1,10 @@
-// The tools of the demo, in navigation order. The top bar, the address
-// (#id) and the layout are all built from this list.
+// The tools of the demo. The top bar, the address (#id), the map's tool rail
+// and the layout are all built from this list.
 //
 // layout "workspace": the tool stands on the one map of the workspace
-// (shell/WorkspaceLayout.jsx) and renders an InputWidget and a ResultHud.
+// (shell/WorkspaceLayout.jsx), opened from the rail on the map, and renders
+// an InputWidget and a ResultHud. The address #map is the map with no tool
+// open, where the app starts; the top bar names the map once for them all.
 // layout "page": the tool is a centred column (PageLayout) and the page
 // scrolls. prefetch, when present, starts loading what the tool needs as
 // soon as its link is pointed at or focused.
@@ -52,7 +54,21 @@ export const TOOLS = Object.freeze([
   { id: "reference", labelKey: "navReference", icon: "reference", layout: "page", Component: ReferenceTool },
 ]);
 
-export const DEFAULT_TOOL = "measure";
+/** The address of the map with no tool open. */
+export const MAP_ID = "map";
+
+export const DEFAULT_TOOL = MAP_ID;
+
+/** Whether an address opens the map: #map or a workspace tool. */
+export function isWorkspace(id) {
+  return id === MAP_ID || TOOLS.some((tool) => tool.id === id && tool.layout === "workspace");
+}
+
+/** The top bar's links: the map, where every workspace tool opens, then the page tools. */
+export const NAV = Object.freeze([
+  Object.freeze({ id: MAP_ID, labelKey: "navMap", icon: "world", layout: "workspace", prefetch: prefetchMapLibre }),
+  ...TOOLS.filter((tool) => tool.layout === "page"),
+]);
 
 // Addresses of earlier versions that still open a tool.
 const ALIASES = new Map([["distance", "measure"]]);
@@ -62,10 +78,11 @@ const ALIASES = new Map([["distance", "measure"]]);
  * after a slash names a place inside the tool ("#reference/errors") and is
  * left to the tool (lib/address.js, sectionOf).
  * @param {string} hashId the address without "#"
- * @returns {string | null} a tool id, or null when the address names no tool
+ * @returns {string | null} a tool id or MAP_ID, or null when the address names neither
  */
 export function resolveTool(hashId) {
   const [head] = hashId.split("/");
   const id = ALIASES.get(head) ?? head;
+  if (id === MAP_ID) return MAP_ID;
   return TOOLS.some((tool) => tool.id === id) ? id : null;
 }

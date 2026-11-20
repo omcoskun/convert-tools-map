@@ -141,6 +141,9 @@ const PLACE_BOX = 14;
 const SETTLEMENT_BOX = 72;
 // The address follows the view this long after it settles (ms).
 const VIEW_LINK_DELAY_MS = 400;
+// Panels that appear this long after the map loads, with no input yet, are
+// part of the page loading, not a panel the person opened (see syncView).
+const SETTLE_AFTER_LOAD_MS = 1500;
 
 /** Inside another page's frame, where a wheel or one finger should scroll that page. */
 function embedded() {
@@ -1104,6 +1107,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     let cursorFrame = 0;
     let lastPick = null;
     let removeDomListeners = null;
+    let stopSettling = null;
     const container = containerRef.current;
     const basemapState = basemapRef.current;
     const pins = pinsRef.current;
@@ -1225,10 +1229,44 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
         const next = { canZoomIn: map.getZoom() < map.getMaxZoom() - 0.01, canZoomOut: map.getZoom() > floor + 0.01 };
         setNavigation((current) => (next.canZoomIn === current.canZoomIn && next.canZoomOut === current.canZoomOut ? current : next));
       };
+      // While the page settles (until the first input, or a moment after the
+      // map loads) padding changes come from panels appearing as the page
+      // loads: the camera centre stays the one a link or the start view named,
+      // so a ?map= link opens where it points. A view fitted to bounds was
+      // framed for the first padding, so that one leaves it still on the
+      // screen. Once settled, a panel opened or closed leaves the map still.
+      let settling = true;
+      let framed = !linked && Boolean(initialBounds) && !isSinglePoint(initialBounds);
+      let settleTimer = 0;
+      const SETTLE_INPUTS = ["pointerdown", "keydown", "wheel", "touchstart"];
+      const settle = () => {
+        settling = false;
+        window.clearTimeout(settleTimer);
+        for (const type of SETTLE_INPUTS) window.removeEventListener(type, settle, true);
+      };
+      for (const type of SETTLE_INPUTS) window.addEventListener(type, settle, { capture: true, passive: true });
+      map.once("load", () => {
+        settleTimer = window.setTimeout(settle, SETTLE_AFTER_LOAD_MS);
+      });
+      stopSettling = settle;
       const syncView = () => {
         const padding = latestRef.current.getPadding();
         const previous = map.getPadding();
-        if (Object.keys(padding).some((key) => padding[key] !== previous[key])) map.setPadding(padding);
+        if (Object.keys(padding).some((key) => padding[key] !== previous[key])) {
+          // A panel opened or closed: the map stays where it is on the screen,
+          // its camera centre moving to the point shown in the middle of the
+          // new padding (unless the map is moving, or that point is space).
+          const view = map.getCanvas();
+          const middle = {
+            x: padding.left + (view.clientWidth - padding.left - padding.right) / 2,
+            y: padding.top + (view.clientHeight - padding.top - padding.bottom) / 2,
+          };
+          const keep = settling && !framed;
+          const still = keep || map.isMoving() || probingRef.current ? null : lngLatOnMap(map, middle);
+          if (still) map.jumpTo({ center: still, padding });
+          else map.setPadding(padding);
+        }
+        framed = false;
         const minZoom = minimumZoom(map, map.getCenter().lat, padding, modeRef.current);
         if (map.getZoom() < minZoom) map.jumpTo({ zoom: minZoom });
         // The camera centre is the middle of the padded view, whatever the
@@ -1560,6 +1598,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
       if (drag.frame) cancelAnimationFrame(drag.frame);
       dragRef.current = { id: null, frame: 0, pending: null };
       removeDomListeners?.();
+      stopSettling?.();
       for (const entry of pins.values()) entry.marker.remove();
       for (const marker of tags.values()) marker.remove();
       pins.clear();

@@ -104,8 +104,16 @@ export default function ImportPanel({ data, open, onClose }) {
       setMaxHeight(Math.max(MIN_HEIGHT, stage.clientHeight - box.offsetTop - panel.offsetTop - ROOM_BELOW));
     }
     fit();
+    // The map area changes height without the window (a phone's tool sheet
+    // opening or closing), so the panel watches the stage itself.
+    const stage = panelRef.current?.offsetParent?.offsetParent;
+    const observer = typeof ResizeObserver === "function" && stage ? new ResizeObserver(fit) : null;
+    observer?.observe(stage);
     window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", fit);
+    };
   }, [open]);
 
   useEffect(() => {

@@ -7,11 +7,13 @@ import { useWidgetRef, useWorkspace } from "./workspace-context.js";
 
 /**
  * The widget that holds what the user types or picks, floating at the top
- * left of the workspace map (spec 6.2); on phones it is the body of the
- * bottom sheet (6.3). Its header carries the tool title (the page's h1) and
- * a collapse button; collapsed it is only its header. The body scrolls
- * inside the widget, which never grows over the result widget. A workspace
- * tool renders exactly one, next to its ResultHud.
+ * left of the workspace map, right of the tool rail (spec 6.2); on phones it
+ * is the body of the bottom sheet (6.3). Its header carries the tool title
+ * (the page's h1), a collapse button and a close button (the tool's rail
+ * button closes it too); collapsed it is only its header. The body scrolls
+ * inside the widget, which never grows over the result widget. While the
+ * tool is closed the widget stays mounted, hidden, keeping what was typed.
+ * A workspace tool renders exactly one, next to its ResultHud.
  * @param {{
  *   title: string,
  *   subtitle?: string,
@@ -25,7 +27,7 @@ import { useWidgetRef, useWorkspace } from "./workspace-context.js";
  */
 export default function InputWidget({ title, subtitle, icon, actions, children }) {
   const { text } = useLanguage();
-  const { expanded } = useWorkspace();
+  const { expanded, toolOpen, closeTool } = useWorkspace();
   const widgetRef = useWidgetRef("input");
   const [collapsed, setCollapsed] = useState(false);
   const contentId = useId();
@@ -34,7 +36,7 @@ export default function InputWidget({ title, subtitle, icon, actions, children }
   return (
     <>
       {/* While the map is enlarged the widget is hidden; the page keeps its h1. */}
-      {expanded && (
+      {expanded && toolOpen && (
         <Box component="h1" sx={visuallyHidden}>
           {title}
         </Box>
@@ -47,10 +49,10 @@ export default function InputWidget({ title, subtitle, icon, actions, children }
         sx={{
           position: "absolute",
           top: BAR_HEIGHT + WORKSPACE.inset,
-          left: WORKSPACE.inset,
+          left: WORKSPACE.dock,
           width: WORKSPACE.inputWidth,
           maxHeight: `var(--input-max, calc(100% - ${BAR_HEIGHT + 2 * WORKSPACE.inset + 180}px))`,
-          display: expanded ? "none" : "flex",
+          display: expanded || !toolOpen ? "none" : "flex",
           flexDirection: "column",
           overflow: "hidden",
           border: `1px solid ${COLORS.rule}`,
@@ -136,6 +138,30 @@ export default function InputWidget({ title, subtitle, icon, actions, children }
             }}
           >
             <Icon name="chevron" size={18} />
+          </Box>
+          <Box
+            component="button"
+            type="button"
+            onClick={closeTool}
+            aria-label={text.closeTool}
+            title={text.closeTool}
+            sx={{
+              display: "grid",
+              placeItems: "center",
+              flex: "none",
+              width: 36,
+              height: 36,
+              border: 0,
+              borderRadius: `${RADIUS.control}px`,
+              bgcolor: "transparent",
+              color: COLORS.ink2,
+              cursor: "pointer",
+              transition: `background-color ${MOTION.fast} ${MOTION.ease}`,
+              "&:hover": { bgcolor: COLORS.paper2, color: COLORS.ink },
+              [PHONE]: { width: 40, height: 40, mr: -1 },
+            }}
+          >
+            <Icon name="clear" size={16} />
           </Box>
         </Box>
         <Box

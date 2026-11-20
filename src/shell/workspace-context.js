@@ -17,7 +17,7 @@ import { createContext, useCallback, useContext, useEffect, useRef } from "react
  */
 export const WorkspaceApiContext = createContext(null);
 
-/** @type {import("react").Context<null | { expanded: boolean, mapStatus: MapStatus }>} */
+/** @type {import("react").Context<null | { expanded: boolean, mapStatus: MapStatus, toolOpen: boolean, closeTool: () => void }>} */
 export const WorkspaceContext = createContext(null);
 
 /**
@@ -69,10 +69,11 @@ export function useMapScene(scene, handlers) {
 
 /**
  * The workspace as a tool or widget sees it.
- * @returns {{ expanded: boolean, mapStatus: MapStatus }} expanded: the map is
- *   enlarged and the widgets are tucked away (the result shows one compact
- *   line); mapStatus: whether the map is loading, ready, failed or
- *   unsupported.
+ * @returns {{ expanded: boolean, mapStatus: MapStatus, toolOpen: boolean, closeTool: () => void }}
+ *   expanded: the map is enlarged and the widgets are tucked away (the
+ *   result shows one compact line); mapStatus: whether the map is loading,
+ *   ready, failed or unsupported; toolOpen: false while the tool is closed
+ *   (it stays mounted, its widgets and scene hidden); closeTool closes it.
  */
 export function useWorkspace() {
   const value = useContext(WorkspaceContext);

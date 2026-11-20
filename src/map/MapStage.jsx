@@ -3,7 +3,7 @@ import Icon from "../components/Icon.jsx";
 import { useLanguage, useThemeMode } from "../context.js";
 import { copyText } from "../lib/clipboard.js";
 import { readPref, writePref } from "../lib/prefs.js";
-import { BAR_HEIGHT, COLORS, MONO_FONT, MOTION, PHONE, RADIUS, SHADOW, TYPE, UI_FONT, WORKSPACE } from "../theme.js";
+import { BAR_HEIGHT, COLORS, MONO_FONT, MOTION, NARROW_DOCK, PHONE, RADIUS, SHADOW, TYPE, UI_FONT, WORKSPACE } from "../theme.js";
 import { Box, visuallyHidden } from "../ui/index.js";
 import Attribution from "./Attribution.jsx";
 import { TONE_COLORS, findBasemap } from "./basemaps.js";
@@ -248,6 +248,53 @@ function ControlButton({ label, icon, onClick, disabled, pressed, expanded, butt
 
 const Separator = () => <Box component="span" aria-hidden="true" sx={{ height: "1px", m: "3px 6px", bgcolor: COLORS.rule }} />;
 
+/** A button of the tool rail: the icon over a short name; the full name is its accessible name. */
+function RailButton({ label, short, icon, onClick, disabled, pressed, expanded, buttonRef }) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      ref={buttonRef}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={pressed}
+      aria-expanded={expanded}
+      aria-haspopup={expanded === undefined ? undefined : "dialog"}
+      title={label}
+      sx={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "3px",
+        width: 48,
+        minHeight: 48,
+        p: "4px 2px",
+        border: 0,
+        borderRadius: `${RADIUS.control}px`,
+        bgcolor: "transparent",
+        color: COLORS.ink2,
+        font: "inherit",
+        cursor: "pointer",
+        transition: `background-color ${MOTION.fast} ${MOTION.ease}, color ${MOTION.fast} ${MOTION.ease}`,
+        "&:hover:not(:disabled)": { bgcolor: COLORS.paper2, color: COLORS.ink },
+        "&:disabled": { cursor: "default", opacity: 0.4 },
+        "&[aria-pressed='true'], &[aria-expanded='true'], &[aria-pressed='true']:hover:not(:disabled), &[aria-expanded='true']:hover:not(:disabled)": {
+          bgcolor: COLORS.aSoft,
+          color: COLORS.aInk,
+        },
+        "&:focus-visible": { outline: `3px solid ${COLORS.focus}`, outlineOffset: "1px" },
+        "& > span": { maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 10, fontWeight: 650, lineHeight: 1.1, letterSpacing: "0.01em" },
+        [PHONE]: { width: 44, minHeight: 44, "& > span": { display: "none" } },
+      }}
+    >
+      <Icon name={icon} size={20} />
+      <span aria-hidden="true">{short}</span>
+    </Box>
+  );
+}
+
 // One rounded group of the control column.
 const groupSx = { ...glassSurface, display: "flex", flexDirection: "column", p: "3px", borderRadius: `${RADIUS.card}px` };
 
@@ -301,10 +348,15 @@ const textButton = {
  *   onToggleExpanded: () => void,
  *   onStatusChange: (status: import("../shell/workspace-context.js").MapStatus) => void,
  *   active: boolean,
+ *   tools?: { id: string, label: string, icon: string }[],
+ *   openTool?: string | null,
+ *   onToggleTool?: (id: string) => void,
  * }} props
  *   basemaps, defaultBasemap, terrain: config.map. owner: the tool that published
  *   the scene (see useMapStage). active: false while a page tool hides the
- *   workspace, so Esc is left alone.
+ *   workspace, so Esc is left alone. tools: the workspace tools of the rail,
+ *   openTool the open one; onToggleTool opens or closes one. onDockedChange
+ *   hears whether a panel (the symbols, the data) is docked on the left.
  */
 export default function MapStage({
   basemaps,
@@ -318,6 +370,10 @@ export default function MapStage({
   onToggleExpanded,
   onStatusChange,
   active,
+  tools = [],
+  openTool = null,
+  onToggleTool,
+  onDockedChange,
 }) {
   const { language, text } = useLanguage();
   const { mode } = useThemeMode();
@@ -501,6 +557,12 @@ export default function MapStage({
     mapLocationUnavailable: text.mapLocationUnavailable,
   }[location.errorKey];
   const columnTop = top(expanded, WORKSPACE.inset);
+  // A panel docked beside the tool's panel: the workspace moves --dock-edge
+  // past it, so the hints, the scale bar and the result bar keep clear of it.
+  const docked = ready && (symbols.open || imports.open);
+  useEffect(() => {
+    onDockedChange?.(docked);
+  }, [docked, onDockedChange]);
 
   return (
     <Box
@@ -538,7 +600,7 @@ export default function MapStage({
         sx={{
           position: "absolute",
           top: top(expanded, WORKSPACE.inset),
-          left: expanded ? 76 : `calc(${WORKSPACE.inputWidth} + ${2 * WORKSPACE.inset}px)`,
+          left: expanded ? 76 : `var(--dock-edge, ${WORKSPACE.dock}px)`,
           right: 76,
           zIndex: 4,
           display: "flex",
@@ -547,7 +609,7 @@ export default function MapStage({
           gap: 1,
           pointerEvents: "none",
           "& > *": { pointerEvents: "auto" },
-          [PHONE]: { top: top(expanded, 62), left: 10, right: 60 },
+          [PHONE]: { top: top(expanded, 62), left: 64, right: 60 },
         }}
       >
         {picking && (
@@ -685,6 +747,75 @@ export default function MapStage({
         </Box>
       )}
 
+      {/* The tool rail: the workspace tools, then the symbol palette and the
+          data panel, which dock beside the open tool's panel. Several can be
+          open at once; a narrow window lays the docked panel over the tool's. */}
+      {!expanded && (
+        <Box
+          role="group"
+          className="map-tool-rail"
+          aria-label={text.mapTools}
+          sx={{
+            ...groupSx,
+            position: "absolute",
+            top: columnTop,
+            left: WORKSPACE.inset,
+            zIndex: 3,
+            width: WORKSPACE.rail,
+            boxSizing: "border-box",
+            alignItems: "center",
+            gap: "2px",
+            p: "4px",
+            [PHONE]: { top: top(expanded, 10), left: 10, width: "auto" },
+          }}
+        >
+          {tools.map((entry) => (
+            <RailButton key={entry.id} label={entry.label} short={entry.label} icon={entry.icon} pressed={openTool === entry.id} onClick={() => onToggleTool?.(entry.id)} />
+          ))}
+          {tools.length > 0 && <Box component="span" aria-hidden="true" sx={{ alignSelf: "stretch", height: "1px", m: "3px 4px", bgcolor: COLORS.rule }} />}
+          <RailButton
+            label={text.mapSymbols}
+            short={text.railSymbols}
+            icon="symbol"
+            buttonRef={symbolsButtonRef}
+            expanded={symbols.open}
+            onClick={() => {
+              imports.closePanel();
+              symbols.togglePalette();
+            }}
+            disabled={!ready}
+          />
+          <RailButton
+            label={text.importTitle}
+            short={text.railData}
+            icon="import"
+            buttonRef={importsButtonRef}
+            expanded={imports.open}
+            onClick={() => {
+              if (symbols.open) symbols.closePalette();
+              imports.togglePanel();
+            }}
+            disabled={!ready}
+          />
+        </Box>
+      )}
+
+      <Box
+        className="map-dock"
+        sx={{
+          position: "absolute",
+          top: columnTop,
+          left: `var(--dock-left, ${WORKSPACE.dock}px)`,
+          zIndex: 5,
+          "&:empty": { display: "none" },
+          [NARROW_DOCK]: { left: WORKSPACE.dock },
+          [PHONE]: { top: top(expanded, 10), left: 8, right: 8, "& > *": { width: "100% !important", maxWidth: "none !important" } },
+        }}
+      >
+        <SymbolPalette palette={symbols} open={symbols.open && ready} onClose={closeSymbols} />
+        <ImportPanel data={imports} open={imports.open && ready} onClose={closeImports} />
+      </Box>
+
       {/* The control column: what the map shows, where it looks, what it does. */}
       <Box
         role="group"
@@ -710,42 +841,12 @@ export default function MapStage({
             icon="layers"
             buttonRef={layersButtonRef}
             expanded={layersOpen}
-            onClick={() => {
-              if (symbols.open) symbols.closePalette();
-              imports.closePanel();
-              setLayersOpen((open) => !open);
-            }}
+            onClick={() => setLayersOpen((open) => !open)}
             disabled={!ready}
           />
           <ControlButton label={text.map3D} onClick={() => setMode(viewMode === "3d" ? "2d" : "3d")} disabled={!ready} pressed={viewMode === "3d"}>
             <Box component="span" sx={{ fontSize: 12, fontWeight: 750, letterSpacing: "0.02em" }}>3D</Box>
           </ControlButton>
-        </Box>
-        <Box sx={groupSx}>
-          <ControlButton
-            label={text.mapSymbols}
-            icon="symbol"
-            buttonRef={symbolsButtonRef}
-            expanded={symbols.open}
-            onClick={() => {
-              setLayersOpen(false);
-              imports.closePanel();
-              symbols.togglePalette();
-            }}
-            disabled={!ready}
-          />
-          <ControlButton
-            label={text.importTitle}
-            icon="import"
-            buttonRef={importsButtonRef}
-            expanded={imports.open}
-            onClick={() => {
-              setLayersOpen(false);
-              if (symbols.open) symbols.closePalette();
-              imports.togglePanel();
-            }}
-            disabled={!ready}
-          />
         </Box>
         <Box sx={groupSx}>
           <ControlButton label={text.mapZoomIn} icon="plus" onClick={map.zoomIn} disabled={!ready || !map.canZoomIn} />
@@ -817,8 +918,6 @@ export default function MapStage({
           scalePinned={scalePinned}
           onToggleScalePinned={toggleScalePinned}
         />
-        <SymbolPalette palette={symbols} open={symbols.open && ready} onClose={closeSymbols} />
-        <ImportPanel data={imports} open={imports.open && ready} onClose={closeImports} />
       </Box>
 
       {/* The scale bar, as on Apple Maps: top centre of the window, or just
@@ -830,11 +929,12 @@ export default function MapStage({
           sx={{
             position: "absolute",
             top: top(expanded, WORKSPACE.inset / 2),
-            left: expanded ? "50%" : `max(50%, calc(${WORKSPACE.inputWidth} + ${2 * WORKSPACE.inset}px + ${SCALE_HALF_WIDTH}px))`,
+            left: expanded ? "50%" : `max(50%, calc(var(--dock-edge, ${WORKSPACE.dock}px) + ${8 + SCALE_HALF_WIDTH}px))`,
             transform: "translateX(-50%)",
             zIndex: 3,
             pointerEvents: "none",
-            [PHONE]: { left: 0, transform: "none" },
+            // On a phone, right of the tool rail.
+            [PHONE]: { left: 58, transform: "none" },
           }}
         >
           <ScaleBar

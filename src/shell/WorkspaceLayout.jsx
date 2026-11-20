@@ -3,8 +3,8 @@ import { useConfig, useLanguage } from "../context.js";
 import MapStage from "../map/MapStage.jsx";
 import { PIN_SHAPE, fitPadding } from "../map/map-adapter.js";
 import { EMPTY_SCENE } from "../map/scene.js";
-import { BAR_HEIGHT, COLORS, PHONE, PHONE_BAR_HEIGHT, WORKSPACE } from "../theme.js";
-import { Box } from "../ui/index.js";
+import { BAR_HEIGHT, COLORS, NARROW_DOCK, PHONE, PHONE_BAR_HEIGHT, WORKSPACE } from "../theme.js";
+import { Box, visuallyHidden } from "../ui/index.js";
 import { WorkspaceApiContext, WorkspaceContext } from "./workspace-context.js";
 
 // Phone layout: share of the workspace height the bottom sheet may take.
@@ -17,24 +17,52 @@ const PHONE_QUERY = "(max-width: 759.98px)";
 const NOTHING_PUBLISHED = Object.freeze({ owner: null, scene: EMPTY_SCENE });
 const NO_HANDLERS = Object.freeze({});
 const clampRatio = (ratio) => Math.min(SHEET_MAX, Math.max(SHEET_MIN, ratio));
+
+/**
+ * What floats on the map's left, as one box: the tool rail, the open tool's
+ * panel and the panels docked beside it; null when none of them shows.
+ */
+function leftDock(nodes) {
+  let box = null;
+  for (const node of nodes) {
+    const rect = node?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) continue;
+    box = box
+      ? { left: Math.min(box.left, rect.left), top: Math.min(box.top, rect.top), right: Math.max(box.right, rect.right), bottom: Math.max(box.bottom, rect.bottom) }
+      : { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  }
+  return box && { ...box, width: box.right - box.left, height: box.bottom - box.top };
+}
 const fill = { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 };
 
 /**
  * The workspace: the one map of the app (MapStage) filling the window under
- * the glass top bar, with the open workspace tool's widgets floating on it
- * (desktop, spec 6.2) or in a bottom sheet under it (phones, 6.3). It
- * provides useMapScene and useWorkspace to the tool, and stays mounted,
- * hidden, while a page tool is open, so the map keeps its view.
- * @param {{ hidden?: boolean, children: import("react").ReactNode }} props
- *   children is the workspace tool: one InputWidget and one ResultHud.
+ * the glass top bar, with the tool rail on its left and the open workspace
+ * tool's widgets floating on it beside the rail (desktop, spec 6.2) or in a
+ * bottom sheet under it (phones, 6.3). A closed tool stays mounted with its
+ * widgets, scene and sheet hidden, so the map is free. It provides
+ * useMapScene and useWorkspace to the tool, and stays mounted, hidden, while
+ * a page tool is open, so the map keeps its view.
+ * @param {{
+ *   hidden?: boolean,
+ *   tools: { id: string, label: string, icon: string }[],
+ *   openTool: string | null,
+ *   onToggleTool: (id: string) => void,
+ *   children?: import("react").ReactNode,
+ * }} props
+ *   tools: the rail's workspace tools; openTool: the one open, or null;
+ *   children is the last opened workspace tool, if any: one InputWidget and
+ *   one ResultHud.
  */
-export default function WorkspaceLayout({ hidden = false, children }) {
+export default function WorkspaceLayout({ hidden = false, tools, openTool, onToggleTool, children }) {
   const { map: mapSettings } = useConfig();
   const { text } = useLanguage();
   const [published, setPublished] = useState(NOTHING_PUBLISHED);
   const [expanded, setExpanded] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
   const [sheetRatio, setSheetRatio] = useState(SHEET_DEFAULT);
+  // Whether a panel (the symbols, the data) is docked on the left.
+  const [docked, setDocked] = useState(false);
   const rootRef = useRef(null);
   const handlersRef = useRef(NO_HANDLERS);
   const handlersOwnerRef = useRef(null);
@@ -130,7 +158,7 @@ export default function WorkspaceLayout({ hidden = false, children }) {
     return fitPadding(
       stage.getBoundingClientRect(),
       {
-        input: input?.getBoundingClientRect() ?? null,
+        input: leftDock([stage.querySelector(".map-tool-rail"), input, stage.querySelector(".map-dock")]),
         result: result?.getBoundingClientRect() ?? null,
         controls: controls?.getBoundingClientRect() ?? null,
       },
@@ -139,7 +167,17 @@ export default function WorkspaceLayout({ hidden = false, children }) {
   }, []);
 
   const toggleExpanded = useCallback(() => setExpanded((value) => !value), []);
-  const state = useMemo(() => ({ expanded, mapStatus }), [expanded, mapStatus]);
+  const toolOpen = openTool != null;
+  const toggleRef = useRef(onToggleTool);
+  toggleRef.current = onToggleTool;
+  const openToolRef = useRef(openTool);
+  openToolRef.current = openTool;
+  const closeTool = useCallback(() => {
+    if (openToolRef.current) toggleRef.current(openToolRef.current);
+  }, []);
+  const state = useMemo(() => ({ expanded, mapStatus, toolOpen, closeTool }), [expanded, mapStatus, toolOpen, closeTool]);
+  // A closed tool's scene leaves the map; reopened, it comes back as it was.
+  const shown = toolOpen ? published : NOTHING_PUBLISHED;
 
   useEffect(() => {
     if (hidden) setExpanded(false);
@@ -188,16 +226,23 @@ export default function WorkspaceLayout({ hidden = false, children }) {
       <WorkspaceContext.Provider value={state}>
         <Box
           ref={rootRef}
-          style={{ "--sheet-ratio": sheetRatio }}
+          // --dock-left: where panels docked beside the open tool's panel start;
+          // --dock-edge: where everything docked on the left ends (a narrow
+          // window lays the docked panel over the tool's).
+          data-docked={docked}
+          style={{ "--sheet-ratio": sheetRatio, "--dock-left": toolOpen ? `calc(${WORKSPACE.dock}px + ${WORKSPACE.inputWidth} + 8px)` : `${WORKSPACE.dock}px` }}
           sx={{
             ...fill,
+            "--dock-edge": docked ? `calc(var(--dock-left) + ${WORKSPACE.docked}px)` : "var(--dock-left)",
+            ...(docked && { [NARROW_DOCK]: { "--dock-edge": `max(var(--dock-left), ${WORKSPACE.dock + WORKSPACE.docked}px)` } }),
             position: "fixed",
             zIndex: expanded ? 1300 : 0,
             visibility: hidden ? "hidden" : "visible",
             bgcolor: COLORS.paper,
             "& > .map-stage": fill,
             "& > .workspace-ui": { ...fill, zIndex: 1, pointerEvents: "none" },
-            [PHONE]: expanded
+            ...(!toolOpen && { "& > .workspace-ui": { display: "none" } }),
+            [PHONE]: expanded || !toolOpen
               ? undefined
               : {
                   display: "flex",
@@ -226,18 +271,27 @@ export default function WorkspaceLayout({ hidden = false, children }) {
                 },
           }}
         >
+          {!toolOpen && (
+            <Box component="h1" sx={visuallyHidden}>
+              {text.navMap}
+            </Box>
+          )}
           <MapStage
             basemaps={mapSettings.basemaps}
             defaultBasemap={mapSettings.defaultBasemap}
             terrain={mapSettings.terrain ?? null}
-            scene={published.scene}
-            owner={published.owner}
+            scene={shown.scene}
+            owner={shown.owner}
             handlersRef={handlersRef}
             getPadding={getPadding}
             expanded={expanded}
             onToggleExpanded={toggleExpanded}
             onStatusChange={setMapStatus}
             active={!hidden}
+            tools={tools}
+            openTool={openTool}
+            onToggleTool={onToggleTool}
+            onDockedChange={setDocked}
           />
           <div className="workspace-ui">
             <Box

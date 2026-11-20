@@ -74,12 +74,18 @@ const MIN_FRAME = 200;
 function framePadding(map, base) {
   const canvas = map.getCanvas().getBoundingClientRect();
   const panel = map.getContainer().closest(".map-stage")?.querySelector(".map-import-panel")?.getBoundingClientRect();
-  let right = base.right;
-  if (panel && panel.left > canvas.left) {
-    const beside = canvas.right - panel.left;
-    if (canvas.width - base.left - beside - 2 * FRAME_MARGIN >= MIN_FRAME) right = Math.max(right, beside);
+  let { left, right } = base;
+  if (panel && panel.width > 0) {
+    // The panel docks on the left; the side it is nearer is the side it covers.
+    const onLeft = panel.left + panel.width / 2 < canvas.left + canvas.width / 2;
+    const beside = onLeft ? panel.right - canvas.left : canvas.right - panel.left;
+    const free = canvas.width - (onLeft ? right : left) - beside - 2 * FRAME_MARGIN;
+    if (free >= MIN_FRAME) {
+      if (onLeft) left = Math.max(left, beside);
+      else right = Math.max(right, beside);
+    }
   }
-  return { top: base.top + FRAME_MARGIN, right: right + FRAME_MARGIN, bottom: base.bottom + FRAME_MARGIN, left: base.left + FRAME_MARGIN };
+  return { top: base.top + FRAME_MARGIN, right: right + FRAME_MARGIN, bottom: base.bottom + FRAME_MARGIN, left: left + FRAME_MARGIN };
 }
 
 /** The corners [top-left, top-right, bottom-right, bottom-left] of a new image in the free part of the view. */

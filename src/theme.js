@@ -136,7 +136,15 @@ export const PHONE_BAR_HEIGHT = 100;
  * mapShare: the part of the workspace the widgets at rest (the input widget
  * and the result bar, without its drawer) leave to the map (spec 11).
  */
+// rail: the width of the map's tool rail; dock: where the open tool's panel
+// starts, right of the rail; docked: the width of a panel docked beside it
+// (the symbols, the data) and its gap. WorkspaceLayout sets two CSS
+// variables: --dock-left, where docked panels start, and --dock-edge, where
+// everything docked on the left ends.
 export const WORKSPACE = Object.freeze({
+  rail: 56,
+  dock: 16 + 56 + 8,
+  docked: 336 + 8,
   inputWidth: "clamp(320px, 25vw, 344px)",
   hudWidth: "min(640px, calc(100% - 48px))",
   inset: 16,
@@ -152,6 +160,8 @@ export const MONO_FONT = 'ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains M
 // Phone layout below this width: the workspace puts the map above a bottom
 // sheet, controls grow for touch and pages narrow their padding.
 export const PHONE = "@media (max-width: 759.98px)";
+// Below this width a panel docked beside the open tool's panel goes over it.
+export const NARROW_DOCK = "@media (min-width: 760px) and (max-width: 1179.98px)";
 
 export const THEME_MODES = Object.freeze(["light", "dark"]);
 export const THEME_PREFERENCES = Object.freeze(["system", "light", "dark"]);

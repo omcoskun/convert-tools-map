@@ -4,7 +4,7 @@ import Segmented from "../components/Segmented.jsx";
 import { useConfig, useLanguage } from "../context.js";
 import { BAR_HEIGHT, COLORS, MOTION, PHONE, PHONE_BAR_HEIGHT, RADIUS, SHADOW, TYPE } from "../theme.js";
 import { basemapOrigins } from "../map/maplibre.js";
-import { TOOLS } from "../tools/index.js";
+import { MAP_ID, NAV, isWorkspace } from "../tools/index.js";
 import { Box, visuallyHidden } from "../ui/index.js";
 import ThemeMenu from "./ThemeMenu.jsx";
 
@@ -78,10 +78,11 @@ const tooltip = {
 };
 
 /**
- * The bar across the top of every tool: brand, one link per tool of the
- * registry (icon and label; below 1100 px only the open tool keeps its
- * label, the others a tooltip and their accessible name; on phones the row
- * scrolls sideways) and the language switch.
+ * The bar across the top of every tool: brand, the links of the registry's
+ * NAV (the map, then the page tools: icon and label; below 1100 px only the
+ * current link keeps its label, the others a tooltip and their accessible
+ * name; on phones the row scrolls sideways if it must) and the language
+ * switch.
  * @param {{
  *   tool: string,
  *   onSelect: (id: string) => void,
@@ -173,8 +174,9 @@ export default function TopBar({ tool, onSelect, language, onLanguage, overMap =
           component="ul"
           sx={{ display: "flex", gap: 0.5, m: 0, p: 0, listStyle: "none", [PHONE]: { gap: 0.25, width: "100%" } }}
         >
-          {TOOLS.map((entry) => {
-            const current = entry.id === tool;
+          {NAV.map((entry) => {
+            // The map is current while it shows, whichever map tool is open on it.
+            const current = entry.id === MAP_ID ? isWorkspace(tool) : entry.id === tool;
             const label = text[entry.labelKey];
             return (
               <Box

@@ -38,11 +38,28 @@ function renderTool(initialTool, { language = "tr", configuration = config } = {
   return { html, text: visibleText(html) };
 }
 
-test("the app opens on the measure tool", () => {
+test("the app opens on the map with no tool open, the map tools in a rail on it", () => {
   const html = renderToString(createElement(App, { config, lang }));
-  assert.ok(visibleText(html).includes(lang.tr.text.distanceTitle));
+  const words = lang.tr.text;
+  assert.ok(!visibleText(html).includes(words.distanceTitle), "no tool panel");
   const current = html.match(/<a\b[^>]*aria-current="page"[^>]*>[\s\S]*?<\/a>/)[0];
-  assert.equal(visibleText(current), lang.tr.text.navMeasure);
+  assert.equal(visibleText(current), words.navMap);
+  const rail = element(html, 'class="map-tool-rail');
+  assert.ok(rail, "the tool rail");
+  for (const label of [words.navMeasure, words.navPositions, words.navCrs, words.mapSymbols, words.importTitle]) {
+    assert.match(rail, new RegExp(`aria-label="${label}"`), label);
+  }
+  assert.doesNotMatch(rail, /aria-pressed="true"/);
+});
+
+test("#measure opens the measure tool's panel on the map, closable, its rail button pressed", () => {
+  const { html, text } = renderTool("measure");
+  const words = lang.tr.text;
+  assert.ok(text.includes(words.distanceTitle));
+  assert.match(element(html, 'class="map-tool-rail'), new RegExp(`aria-pressed="true"[^>]*aria-label="${words.navMeasure}"|aria-label="${words.navMeasure}"[^>]*aria-pressed="true"`));
+  assert.ok(element(html, `aria-label="${words.closeTool}"`), "the panel's close button");
+  const current = html.match(/<a\b[^>]*aria-current="page"[^>]*>[\s\S]*?<\/a>/)[0];
+  assert.equal(visibleText(current), words.navMap);
 });
 
 test("the old #distance address opens the measure tool", () => {
@@ -128,24 +145,25 @@ test("the language switch shows every language and the English text renders", ()
   for (const code of config.languages) assert.ok(text.includes(code.toUpperCase()), code);
 });
 
-test("the navigation offers every tool directly, in order, with the open one marked", () => {
+test("the navigation offers the map and the page tools, in order, with the open one marked", () => {
   for (const language of config.languages) {
     const { html } = renderTool("crs", { language });
     const nav = html.match(/<nav\b[^>]*>[\s\S]*?<\/nav>/)[0];
     assert.match(nav, new RegExp(`^<nav[^>]*aria-label="${lang[language].text.navigation}"`));
     const links = [...nav.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/g)].map((match) => match[0]);
-    const keys = ["navMeasure", "navPositions", "navCrs", "navLength", "navTriaxial", "navReference"];
+    const keys = ["navMap", "navLength", "navTriaxial", "navReference"];
     assert.equal(links.length, keys.length);
     keys.forEach((key, index) => {
-      // Each link carries its tool's name, visible or for screen readers.
+      // Each link carries its name, visible or for screen readers.
       assert.equal(visibleText(links[index]), lang[language].text[key], key);
     });
     assert.deepEqual(
       links.map((link) => link.match(/href="([^"]*)"/)[1]),
-      ["#measure", "#positions", "#crs", "#length", "#triaxial", "#reference"],
+      ["#map", "#length", "#triaxial", "#reference"],
     );
     assert.equal(html.match(/aria-current="page"/g).length, 1);
-    assert.match(links[2], /aria-current="page"/);
+    assert.match(links[0], /aria-current="page"/, "a map tool is open: the map is current");
+    assert.match(renderTool("length", { language }).html.match(/<nav\b[^>]*>[\s\S]*?<\/nav>/)[0], /href="#length"[^>]*aria-current="page"|aria-current="page"[^>]*href="#length"/);
   }
 });
 

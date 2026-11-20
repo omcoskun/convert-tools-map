@@ -7,10 +7,11 @@ import { ToolMemoryContext, createToolMemory } from "./shell/tool-memory.js";
 import TopBar from "./shell/TopBar.jsx";
 import WorkspaceLayout from "./shell/WorkspaceLayout.jsx";
 import { COLORS, RADIUS, THEME_PREFERENCES, TYPE, createAppTheme, resolveTheme } from "./theme.js";
-import { DEFAULT_TOOL, TOOLS, resolveTool } from "./tools/index.js";
+import { DEFAULT_TOOL, MAP_ID, TOOLS, isWorkspace, resolveTool } from "./tools/index.js";
 import { Box, CssBaseline, ThemeProvider } from "./ui/index.js";
 
-const layoutOf = (id) => TOOLS.find((tool) => tool.id === id).layout;
+const WORKSPACE_TOOLS = TOOLS.filter((tool) => tool.layout === "workspace");
+const isWorkspaceTool = (id) => id !== MAP_ID && isWorkspace(id);
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const systemPrefersDark = () => (typeof window !== "undefined" && window.matchMedia?.(DARK_QUERY).matches) || false;
@@ -51,9 +52,11 @@ function useThemeModeState() {
 }
 
 /**
- * Workspace tools stand on the one map of WorkspaceLayout. Once a workspace
- * tool has been opened the workspace stays mounted, hidden while a page tool
- * is open, with the last workspace tool in it: coming back keeps the map's
+ * The map comes first: #map is the workspace with no tool open, and the
+ * workspace tools open on it from its rail (#measure, ...); the rail button
+ * of the open tool closes it again (#map). Once the map has been shown the
+ * workspace stays mounted, hidden while a page tool is open, with the last
+ * workspace tool in it, kept while it is closed: coming back keeps the map's
  * view and the tool's state.
  * @param {{ config: any, lang: any, initialLanguage?: string, initialTool?: string }} props
  *   config and lang are the parsed public/config.json and public/lang.json;
@@ -65,21 +68,23 @@ export default function App({ config, lang, initialLanguage, initialTool = DEFAU
   const themeMode = useThemeModeState();
   const appTheme = useMemo(() => createAppTheme(themeMode.mode), [themeMode.mode]);
   const [tool, setTool] = useState(() => resolveTool(initialTool) ?? DEFAULT_TOOL);
-  const [workspaceTool, setWorkspaceTool] = useState(() => (layoutOf(tool) === "workspace" ? tool : null));
+  const [workspaceTool, setWorkspaceTool] = useState(() => (isWorkspaceTool(tool) ? tool : null));
+  const [workspaceShown, setWorkspaceShown] = useState(() => isWorkspace(tool));
   const languageNames = useMemo(
     () => Object.fromEntries(config.languages.map((code) => [code, lang[code].text.languageName])),
     [config.languages, lang],
   );
   const active = useMemo(() => ({ language, languageNames, ...lang[language] }), [language, languageNames, lang]);
   const { text } = active;
-  const entry = TOOLS.find(({ id }) => id === tool);
-  const Tool = entry.Component;
-  const workspace = entry.layout === "workspace";
+  const workspace = isWorkspace(tool);
+  const Tool = workspace ? null : TOOLS.find(({ id }) => id === tool).Component;
   const WorkspaceTool = workspaceTool && TOOLS.find(({ id }) => id === workspaceTool).Component;
+  const railTools = useMemo(() => WORKSPACE_TOOLS.map(({ id, labelKey, icon }) => ({ id, label: text[labelKey], icon })), [text]);
 
   function openTool(id) {
     setTool(id);
-    if (layoutOf(id) === "workspace") setWorkspaceTool(id);
+    if (isWorkspaceTool(id)) setWorkspaceTool(id);
+    if (isWorkspace(id)) setWorkspaceShown(true);
   }
 
   // A tool hands a point to another and opens it (see shell/handoff.js).
@@ -123,6 +128,11 @@ export default function App({ config, lang, initialLanguage, initialTool = DEFAU
     openTool(id);
     window.history.replaceState(null, "", `#${id}`);
   }
+
+  // The rail opens a workspace tool, or closes it when it is the open one.
+  const toggleToolRef = useRef(null);
+  toggleToolRef.current = (id) => selectTool(tool === id ? MAP_ID : id);
+  const toggleTool = useMemo(() => (id) => toggleToolRef.current(id), []);
 
   return (
     <ThemeProvider theme={appTheme}>
@@ -173,12 +183,12 @@ export default function App({ config, lang, initialLanguage, initialTool = DEFAU
             >
               <HandoffContext.Provider value={handoff}>
                 <ToolMemoryContext.Provider value={toolMemory}>
-                  {WorkspaceTool && (
-                    <WorkspaceLayout hidden={!workspace}>
-                      <WorkspaceTool key={workspaceTool} />
+                  {workspaceShown && (
+                    <WorkspaceLayout hidden={!workspace} tools={railTools} openTool={isWorkspaceTool(tool) ? tool : null} onToggleTool={toggleTool}>
+                      {WorkspaceTool && <WorkspaceTool key={workspaceTool} />}
                     </WorkspaceLayout>
                   )}
-                  {!workspace && <Tool />}
+                  {Tool && <Tool />}
                 </ToolMemoryContext.Provider>
               </HandoffContext.Provider>
             </Box>
