@@ -71,6 +71,7 @@ import {
   hillshadeBeforeId,
   hillshadeLayer,
   isDemSource,
+  terrainMeshSource,
   terrainSpec,
 } from "./terrain.js";
 import {
@@ -184,6 +185,18 @@ function lngLatOnMap(map, point) {
       (Math.abs(lngLat.lat) > MERCATOR_LATITUDE_LIMIT || (!map.getRenderWorldCopies() && Math.abs(lngLat.lng) > 180))) return null;
   const back = map.project(lngLat);
   return Math.abs(back.x - point.x) + Math.abs(back.y - point.y) < 1 ? lngLat : null;
+}
+
+/**
+ * Whether the view shows any of the space round the globe. The globe is
+ * drawn as a convex shape, so the view shows none when its four corners are
+ * all on the map.
+ */
+function showsSpace(map) {
+  const canvas = map.getCanvas();
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  return [[0, 0], [width, 0], [0, height], [width, height]].some(([x, y]) => !lngLatOnMap(map, { x, y }));
 }
 
 /** False for a point on the far side of the globe: it projects onto a nearer point. */
@@ -799,7 +812,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     const { relief, colorRelief, threeD, exaggeration } = latest.terrainView;
     const wantTerrain = threeD && modeRef.current === "3d";
     if ((relief || colorRelief) && !map.getSource(HILLSHADE_SOURCE)) map.addSource(HILLSHADE_SOURCE, demSource(config));
-    if (wantTerrain && !map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, demSource(config));
+    if (wantTerrain && !map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainMeshSource(config));
     if (relief && !map.getLayer(HILLSHADE_LAYER)) {
       map.addLayer(hillshadeLayer(sourceRef.current.tone), hillshadeBeforeId(map.getStyle().layers));
     } else if (!relief && map.getLayer(HILLSHADE_LAYER)) {
@@ -883,12 +896,16 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     return () => listeners.delete(listener);
   }, []);
 
-  /** The camera the space backdrop follows: centre, bearing, pitch and whether the globe is drawn; null before the map. */
+  /**
+   * The camera the space backdrop follows: centre, bearing, pitch, whether
+   * the globe is drawn and whether any space shows round it; null before the map.
+   */
   const readCamera = useCallback(() => {
     const map = mapRef.current;
     if (!map) return null;
     const { lng, lat } = map.getCenter();
-    return { longitude: lng, latitude: lat, bearing: map.getBearing(), pitch: map.getPitch(), globe: modeRef.current === "3d" };
+    const globe = modeRef.current === "3d";
+    return { longitude: lng, latitude: lat, bearing: map.getBearing(), pitch: map.getPitch(), globe, space: globe && showsSpace(map) };
   }, []);
 
   /** Ground metres per screen pixel across the centre of the free map, from the core; null over space. */

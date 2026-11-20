@@ -6,7 +6,9 @@
 //
 // Terrain and hillshade read the same tiles through two sources, as
 // MapLibre's own 3D terrain example does: the terrain mesh and the shading
-// are prepared differently from the same data.
+// are prepared differently from the same data. The mesh takes the tiles one
+// zoom coarser (terrainMeshSource): the shading carries the detail, and the
+// 3D view then has a quarter of the terrain tiles to draw the map onto.
 
 import { transformCrs } from "@omcoskun/convert-tools";
 import { MERCATOR_LATITUDE_LIMIT } from "./map-adapter.js";
@@ -31,6 +33,11 @@ export const EXAGGERATIONS = Object.freeze([1, 1.5, 2]);
 /** The MapLibre raster-dem source of `terrain`. */
 export function demSource({ tiles, tileSize, maxzoom, encoding }) {
   return { type: "raster-dem", tiles: [tiles], tileSize, maxzoom, encoding };
+}
+
+/** The source of the 3D terrain mesh: the same tiles, each taken as twice as wide, so MapLibre asks for the zoom above. */
+export function terrainMeshSource(terrain) {
+  return { ...demSource(terrain), tileSize: terrain.tileSize * 2 };
 }
 
 /** Whether a source id is one of the elevation sources (their tile failures are not the basemap's). */

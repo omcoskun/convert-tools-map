@@ -91,8 +91,9 @@ const tooltip = {
  * }} props
  *   tool is the open tool's id; links keep their #id address for opening in
  *   a new tab, a plain click calls onSelect. overMap: the workspace map runs
- *   under the bar, which turns to glass (the sheet at about 90 % with a
- *   backdrop blur where supported).
+ *   under the bar, which turns to glass (the sheet at 94-96 %). No backdrop
+ *   blur: behind so opaque a bar it barely shows, yet it is redrawn on every
+ *   frame the map moves.
  */
 export default function TopBar({ tool, onSelect, language, onLanguage, overMap = false }) {
   const { text, languageNames } = useLanguage();
@@ -134,12 +135,6 @@ export default function TopBar({ tool, onSelect, language, onLanguage, overMap =
         px: 2,
         bgcolor: overMap ? COLORS.glass : COLORS.sheet,
         borderBottom: `1px solid ${COLORS.rule}`,
-        ...(overMap && {
-          "@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))": {
-            WebkitBackdropFilter: "blur(14px) saturate(1.4)",
-            backdropFilter: "blur(14px) saturate(1.4)",
-          },
-        }),
         [PHONE]: { display: "grid", gridTemplateColumns: "1fr auto", gridTemplateRows: "48px 52px", height: PHONE_BAR_HEIGHT, gap: 0, px: 1 },
       }}
     >

@@ -40,11 +40,12 @@ function pickCursor(color) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 13 13, crosshair`;
 }
 
+// No backdrop blur over the map: behind a 94-96 % opaque surface it barely
+// shows, and the browser redraws it on every frame the map moves.
 const glassSurface = {
   border: `1px solid ${COLORS.rule2}`,
   bgcolor: COLORS.glass,
   boxShadow: SHADOW.float,
-  backdropFilter: "blur(12px) saturate(1.4)",
 };
 
 // Half the widest scale bar (96 px and its 28 px sides), for keeping it clear

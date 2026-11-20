@@ -58,10 +58,10 @@ function renderTile(layer, ratio) {
 /**
  * The space behind the globe. Redrawn when the camera moves (subscribeView),
  * the stage is resized or the map has loaded; not while the flat 2D map,
- * which never shows space, is drawn.
+ * which never shows space, is drawn, nor while the globe fills the view.
  * @param {{
  *   subscribeView: (listener: () => void) => () => void,
- *   readCamera: () => ({ longitude: number, latitude: number, bearing: number, pitch: number, globe: boolean } | null),
+ *   readCamera: () => ({ longitude: number, latitude: number, bearing: number, pitch: number, globe: boolean, space?: boolean } | null),
  *   loaded: boolean,
  * }} props
  */
@@ -91,10 +91,19 @@ export default function SpaceBackdrop({ subscribeView, readCamera, loaded }) {
       return layers;
     }
 
+    let hidden = false;
     function draw() {
       const { width, height } = size;
       if (!width || !height) return;
       const view = readCamera() ?? STILL;
+      // While the globe fills the view the canvas is hidden and not redrawn:
+      // nothing of it would show, and the page composites one layer less.
+      const covered = view.globe && view.space === false;
+      if (covered !== hidden) {
+        hidden = covered;
+        canvas.style.visibility = covered ? "hidden" : "";
+      }
+      if (covered) return;
       if (!view.globe && drawn) return;
       // The camera's longitude, continuous across ±180°.
       unwrapped = unwrapped === null ? view.longitude : unwrapLongitude(unwrapped, longitude, view.longitude);

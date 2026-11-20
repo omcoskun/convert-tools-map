@@ -18,6 +18,7 @@ import {
   hillshadeLayer,
   isDemSource,
   terrainCredits,
+  terrainMeshSource,
   terrainSpec,
   terrariumElevation,
 } from "../src/map/terrain.js";
@@ -38,6 +39,13 @@ test("the elevation source is a raster-dem source of the configured tiles, witho
     maxzoom: 15,
     encoding: "terrarium",
   });
+});
+
+test("the 3D terrain mesh reads the same tiles one zoom coarser, the shading at full detail", () => {
+  // Each tile is taken as twice as wide, so MapLibre asks for the zoom above:
+  // a quarter of the tiles to fetch, decode and draw the map onto.
+  assert.deepEqual(terrainMeshSource(TERRAIN), { ...demSource(TERRAIN), tileSize: 512 });
+  assert.equal(demSource(TERRAIN).tileSize, 256);
 });
 
 test("only the two elevation sources count as elevation sources", () => {
