@@ -485,7 +485,10 @@
       "importEmpty": "gösterilecek geçerli bir şekil yok",
       "importTooMany": "en çok {max} şekil gösterilebilir",
       "importTooLarge": "dosya {max} MB'tan büyük",
-      "importImageUnreadable": "görüntü açılamadı"
+      "importImageUnreadable": "görüntü açılamadı",
+      "importFeaturePoint": "Nokta",
+      "importFeatureLine": "Çizgi",
+      "importFeatureArea": "Alan"
     },
     "units": {
       "millimetre": "Milimetre",
@@ -1030,7 +1033,10 @@
       "importEmpty": "there is no valid shape to show",
       "importTooMany": "at most {max} shapes can be shown",
       "importTooLarge": "the file is larger than {max} MB",
-      "importImageUnreadable": "the image could not be opened"
+      "importImageUnreadable": "the image could not be opened",
+      "importFeaturePoint": "Point",
+      "importFeatureLine": "Line",
+      "importFeatureArea": "Area"
     },
     "units": {
       "millimetre": "Millimetre",

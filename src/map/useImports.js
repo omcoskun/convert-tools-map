@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { GeodataError, geodataBounds, readGeodata, unionBounds } from "./geodata.js";
+import { IMPORT_PREFIX, LAYER_SUFFIXES, featureSummary, fileLayers, fileSource, hitLayerIds } from "./import-layers.js";
 import { downscaledSize, overlayRect } from "./overlay.js";
 import { CASING_LAYER, labelFont } from "./useMapStage.js";
 
@@ -14,7 +15,6 @@ export const MAX_IMAGE_MB = 40;
 const MB = 1024 * 1024;
 // Colours apart from the measured lines' blue and red.
 const FILE_COLORS = Object.freeze(["#c026d3", "#0891b2", "#ea580c", "#16a34a", "#7c3aed", "#ca8a04", "#db2777"]);
-const FILE_PREFIX = "convert-import-";
 const OVERLAY_SOURCE = "convert-overlay";
 const OVERLAY_LAYER = "convert-overlay";
 const IMAGE_NAME = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
@@ -22,40 +22,6 @@ const IMAGE_NAME = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
 /** An image to lay over the map, rather than a data file. */
 export function isImageFile(file) {
   return /^image\/(png|jpeg|webp|gif|bmp|avif)$/.test(file.type) || IMAGE_NAME.test(file.name);
-}
-
-const isAny = (types) => ["in", ["geometry-type"], ["literal", types]];
-const AREA = isAny(["Polygon", "MultiPolygon"]);
-const LINE = isAny(["LineString", "MultiLineString"]);
-const POINT = isAny(["Point", "MultiPoint"]);
-const LAYER_SUFFIXES = Object.freeze(["fill", "outline", "casing", "line", "point", "label"]);
-
-function fileLayers({ id, color }, font) {
-  const round = { "line-cap": "round", "line-join": "round" };
-  const layers = [
-    { id: `${id}-fill`, type: "fill", source: id, filter: AREA, paint: { "fill-color": color, "fill-opacity": 0.2 } },
-    { id: `${id}-outline`, type: "line", source: id, filter: AREA, layout: round, paint: { "line-color": color, "line-width": 1.6 } },
-    { id: `${id}-casing`, type: "line", source: id, filter: LINE, layout: round, paint: { "line-color": "#ffffff", "line-opacity": 0.85, "line-width": 5 } },
-    { id: `${id}-line`, type: "line", source: id, filter: LINE, layout: round, paint: { "line-color": color, "line-width": 2.6 } },
-    {
-      id: `${id}-point`,
-      type: "circle",
-      source: id,
-      filter: POINT,
-      paint: { "circle-color": color, "circle-radius": 5.5, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.8 },
-    },
-  ];
-  if (font) {
-    layers.push({
-      id: `${id}-label`,
-      type: "symbol",
-      source: id,
-      filter: ["all", POINT, ["has", "name"]],
-      layout: { "text-field": ["get", "name"], "text-font": font, "text-size": 12, "text-offset": [0, 0.9], "text-anchor": "top", "text-max-width": 10, "text-optional": true },
-      paint: { "text-color": "#16191c", "text-halo-color": "#ffffff", "text-halo-width": 1.6 },
-    });
-  }
-  return layers;
 }
 
 function removeFile(map, id) {
@@ -111,11 +77,19 @@ function cornersInView(map, size) {
 const centerOf = (corners) => [corners.reduce((sum, [lng]) => sum + lng, 0) / 4, corners.reduce((sum, [, lat]) => sum + lat, 0) / 4];
 
 /**
- * @param {{ map: ReturnType<typeof import("./useMapStage.js").default>, cornerLabels: string[] }} options
+ * @param {{
+ *   map: ReturnType<typeof import("./useMapStage.js").default>,
+ *   cornerLabels: string[],
+ *   cardLabels: { point: string, line: string, area: string, close: string },
+ *   picking: boolean,
+ * }} options
  *   cornerLabels: the names of the top-left, top-right, bottom-right and
- *   bottom-left handles and of the centre handle.
+ *   bottom-left handles and of the centre handle. cardLabels: the texts of an
+ *   imported feature's card, one per kind and its close button. picking: true
+ *   while a workspace tool is picking points on the map, when the pointer
+ *   belongs to the tool.
  */
-export default function useImports({ map, cornerLabels }) {
+export default function useImports({ map, cornerLabels, cardLabels, picking }) {
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState([]);
   const [errors, setErrors] = useState([]);
@@ -190,7 +164,7 @@ export default function useImports({ map, cornerLabels }) {
             counterRef.current += 1;
             const index = counterRef.current;
             const entry = {
-              id: `${FILE_PREFIX}${index}`,
+              id: `${IMPORT_PREFIX}${index}`,
               name: file.name,
               color: FILE_COLORS[(index - 1) % FILE_COLORS.length],
               visible: true,
@@ -240,7 +214,7 @@ export default function useImports({ map, cornerLabels }) {
       const wanted = new Set(files.map((file) => file.id));
       for (const id of presentRef.current) if (!wanted.has(id)) removeFile(instance, id);
       for (const file of files) {
-        if (!instance.getSource(file.id)) instance.addSource(file.id, { type: "geojson", data: file.data });
+        if (!instance.getSource(file.id)) instance.addSource(file.id, fileSource(file.data));
         for (const layer of fileLayers(file, font)) {
           if (!instance.getLayer(layer.id)) instance.addLayer(layer, before);
           instance.setLayoutProperty(layer.id, "visibility", file.visible ? "visible" : "none");
@@ -252,6 +226,165 @@ export default function useImports({ map, cornerLabels }) {
       console.warn("Imported files could not be drawn yet.", error);
     }
   }, [files, status, styleRevision, getMap]);
+
+  // ---- Hover and click on the files' features -----------------------------------
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const pickingRef = useRef(picking);
+  pickingRef.current = picking;
+  const cardLabelsRef = useRef(cardLabels);
+  cardLabelsRef.current = cardLabels;
+  const cardFileRef = useRef(null);
+  const closeCardRef = useRef(null);
+  useEffect(() => {
+    const instance = getMap();
+    const library = getLibrary();
+    if (!instance || !library || status !== "ready") return undefined;
+    const busy = () => Boolean(map.mapClickRef.current) || pickingRef.current;
+    let hovered = null;
+    let cursorSet = false;
+    let frame = 0;
+    let point = null;
+    let card = null;
+    let cardFile = null;
+
+    function removeCard() {
+      if (!card && !cardFile) return;
+      card?.remove();
+      card = null;
+      cardFile = null;
+      cardFileRef.current = null;
+    }
+    closeCardRef.current = removeCard;
+
+    function clearHover() {
+      if (hovered) {
+        try {
+          instance.setFeatureState(hovered, { hover: false });
+        } catch {
+          // The source may be gone after a style change.
+        }
+        hovered = null;
+      }
+      if (cursorSet) {
+        instance.getCanvas().style.cursor = "";
+        cursorSet = false;
+      }
+    }
+
+    function topFeature(at) {
+      const layers = hitLayerIds(filesRef.current, (id) => Boolean(instance.getLayer(id)));
+      if (layers.length === 0) return null;
+      try {
+        return instance.queryRenderedFeatures(at, { layers })[0] ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    function updateHover() {
+      frame = 0;
+      if (busy()) {
+        clearHover();
+        return;
+      }
+      const feature = topFeature(point);
+      if (feature && hovered && feature.source === hovered.source && feature.id === hovered.id) return;
+      clearHover();
+      if (!feature || feature.id == null) return;
+      try {
+        instance.setFeatureState({ source: feature.source, id: feature.id }, { hover: true });
+        hovered = { source: feature.source, id: feature.id };
+        instance.getCanvas().style.cursor = "pointer";
+        cursorSet = true;
+      } catch {
+        // A source gone after a style change: there is nothing to highlight.
+      }
+    }
+
+    function onMouseMove(event) {
+      point = event.point;
+      if (!frame) frame = requestAnimationFrame(updateHover);
+    }
+
+    function onMouseOut() {
+      clearHover();
+    }
+
+    function showCard(feature, lngLat) {
+      const file = filesRef.current.find((entry) => entry.id === feature.source);
+      if (!file) return;
+      const summary = featureSummary(feature);
+      const body = document.createElement("div");
+      body.className = "map-import-card-body";
+      const title = document.createElement("strong");
+      title.textContent = summary.title ?? file.name;
+      body.appendChild(title);
+      const meta = document.createElement("span");
+      meta.className = "map-import-card-meta";
+      const kindLabel = summary.kind ? cardLabelsRef.current[summary.kind] : null;
+      meta.textContent = [kindLabel, file.name].filter(Boolean).join(" · ");
+      body.appendChild(meta);
+      if (summary.rows.length > 0) {
+        const list = document.createElement("dl");
+        for (const [key, value] of summary.rows) {
+          const term = document.createElement("dt");
+          term.textContent = key;
+          const detail = document.createElement("dd");
+          detail.textContent = value;
+          list.append(term, detail);
+        }
+        body.appendChild(list);
+      }
+      removeCard();
+      card = new library.Popup({ closeButton: true, closeOnClick: false, closeOnMove: false, maxWidth: "280px", offset: 12, className: "map-import-card" });
+      card.setDOMContent(body).setLngLat(lngLat).addTo(instance);
+      cardFile = file.id;
+      cardFileRef.current = file.id;
+      card.getElement()?.querySelector(".maplibregl-popup-close-button")?.setAttribute("aria-label", cardLabelsRef.current.close);
+    }
+
+    function onClick(event) {
+      if (busy()) return;
+      const origin = event.originalEvent?.target;
+      if (origin instanceof Element && origin.closest(".maplibregl-marker, .maplibregl-popup")) return;
+      const feature = topFeature(event.point);
+      if (!feature) {
+        removeCard();
+        return;
+      }
+      showCard(feature, event.lngLat);
+    }
+
+    function onKeyDown(event) {
+      if (event.key !== "Escape" || !card || event.defaultPrevented) return;
+      removeCard();
+      event.preventDefault();
+    }
+
+    instance.on("mousemove", onMouseMove);
+    instance.on("mouseout", onMouseOut);
+    instance.on("click", onClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      instance.off("mousemove", onMouseMove);
+      instance.off("mouseout", onMouseOut);
+      instance.off("click", onClick);
+      document.removeEventListener("keydown", onKeyDown);
+      if (frame) cancelAnimationFrame(frame);
+      clearHover();
+      removeCard();
+      closeCardRef.current = null;
+    };
+  }, [getMap, getLibrary, status, map.mapClickRef]);
+
+  // A card goes when its file is hidden or removed.
+  useEffect(() => {
+    const id = cardFileRef.current;
+    if (!id) return;
+    const file = files.find((entry) => entry.id === id);
+    if (!file || !file.visible) closeCardRef.current?.();
+  }, [files]);
 
   // ---- The image laid over the map ---------------------------------------
   const shownCanvasRef = useRef(null);
@@ -270,7 +403,7 @@ export default function useImports({ map, cornerLabels }) {
         instance.addSource(OVERLAY_SOURCE, { type: "canvas", canvas: overlay.canvas, coordinates: overlay.corners, animate: false });
         // Under the basemap's labels, so the names stay readable, and under
         // the files and lines drawn on the map.
-        const firstLabel = instance.getStyle().layers.find((layer) => layer.type === "symbol" || layer.id.startsWith(FILE_PREFIX) || layer.id === CASING_LAYER)?.id;
+        const firstLabel = instance.getStyle().layers.find((layer) => layer.type === "symbol" || layer.id.startsWith(IMPORT_PREFIX) || layer.id === CASING_LAYER)?.id;
         instance.addLayer({ id: OVERLAY_LAYER, type: "raster", source: OVERLAY_SOURCE, paint: { "raster-opacity": overlay.opacity, "raster-fade-duration": 0 } }, firstLabel);
         shownCanvasRef.current = overlay.canvas;
       } else {

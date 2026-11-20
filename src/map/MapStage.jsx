@@ -69,6 +69,25 @@ const stageSx = {
   fontFamily: UI_FONT,
   "& > .map-canvas": { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   "& > .map-canvas .maplibregl-canvas:focus-visible": { outline: `3px solid ${COLORS.focus}`, outlineOffset: "-3px" },
+  // The card of an imported feature (useImports), in the interface's colours; no tip.
+  "& .map-import-card .maplibregl-popup-content": {
+    p: "10px 30px 10px 12px",
+    border: `1px solid ${COLORS.rule2}`,
+    borderRadius: `${RADIUS.card}px`,
+    bgcolor: COLORS.sheet,
+    boxShadow: SHADOW.float,
+    color: COLORS.ink,
+    fontFamily: UI_FONT,
+    fontSize: TYPE.small,
+    lineHeight: 1.4,
+  },
+  "& .map-import-card .maplibregl-popup-tip": { display: "none" },
+  "& .map-import-card .maplibregl-popup-close-button": { top: 4, right: 4, width: 24, height: 24, borderRadius: `${RADIUS.control}px`, color: COLORS.muted, fontSize: 18 },
+  "& .map-import-card-body": { display: "flex", flexDirection: "column", gap: "2px", overflowWrap: "anywhere" },
+  "& .map-import-card-meta": { color: COLORS.muted, fontSize: TYPE.meta },
+  "& .map-import-card-body dl": { display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 10px", m: "6px 0 0", fontSize: TYPE.meta },
+  "& .map-import-card-body dt": { color: COLORS.muted, fontWeight: 600 },
+  "& .map-import-card-body dd": { m: 0 },
   ...Object.fromEntries(
     Object.entries(TONES).map(([tone, { color }]) => [
       `&.is-picking-${tone} > .map-canvas .maplibregl-canvas-container.maplibregl-interactive:not(:active)`,
@@ -414,7 +433,11 @@ export default function MapStage({
     () => [text.importCornerTopLeft, text.importCornerTopRight, text.importCornerBottomRight, text.importCornerBottomLeft, text.importCornerCenter],
     [text],
   );
-  const imports = useImports({ map, cornerLabels });
+  const cardLabels = useMemo(
+    () => ({ point: text.importFeaturePoint, line: text.importFeatureLine, area: text.importFeatureArea, close: text.importDismiss }),
+    [text],
+  );
+  const imports = useImports({ map, cornerLabels, cardLabels, picking: Boolean(picking) });
   const importsButtonRef = useRef(null);
   const closeImports = useCallback(() => {
     const focused = document.activeElement;
