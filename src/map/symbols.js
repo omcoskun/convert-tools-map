@@ -222,6 +222,30 @@ export function composeSidc(icon, settings, standard) {
 }
 
 /**
+ * The symbol the palette puts on the map at a point: the chosen catalogue
+ * symbol with the draft's settings, texts and size, its longitude wrapped
+ * into ±180°. Null with nothing chosen yet or off the map.
+ * @param {{ id: string, standardId: string, icon: CatalogIcon | null, draft: { settings: SymbolSettings, texts: object, size: string } }} source
+ * @param {{ lng: number, lat: number }} point
+ */
+export function placedSymbol({ id, standardId, icon, draft }, { lng, lat }) {
+  if (!icon || !Number.isFinite(lng) || !Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+  const standard = symbolStandard(standardId);
+  return {
+    id,
+    standard: standard.id,
+    icon: icon.id,
+    name: icon.name,
+    sidc: composeSidc(icon, draft.settings, standard),
+    settings: draft.settings,
+    texts: draft.texts,
+    size: draft.size,
+    lng: ((((lng + 180) % 360) + 360) % 360) - 180,
+    lat,
+  };
+}
+
+/**
  * The code milsymbol draws: it knows edition E as version 13 and 14, so
  * APP-6E's 16 (APP-06(E)(2)) is drawn as 14, as the fork's editor does.
  */

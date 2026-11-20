@@ -11,6 +11,7 @@ import {
   composeSidc,
   drawingSidc,
   identityChoices,
+  placedSymbol,
   searchSymbols,
   settingsForStandard,
   symbolOffers,
@@ -164,6 +165,26 @@ test("remembered symbols are kept only when whole and on the map", () => {
   assert.equal(cleaned[1].name, "");
   assert.equal(cleaned[2].name, "N".repeat(120));
   assert.deepEqual(cleaned[1].texts, { higherFormation: "B".repeat(60) });
+});
+
+test("a symbol placed from the palette carries the draft at the point, wrapped onto the map", () => {
+  const draft = { iconId: INFANTRY.id, settings: settings({ identity: "hostile", echelon: "battalion" }), texts: { uniqueDesignation: "2/14" }, size: "large" };
+  const symbol = placedSymbol({ id: "s9", standardId: "app6d", icon: INFANTRY, draft }, { lng: 392.5, lat: 39.9 });
+  assert.deepEqual(symbol, {
+    id: "s9",
+    standard: "app6d",
+    icon: INFANTRY.id,
+    name: "Infantry",
+    sidc: "10061000161211000000",
+    settings: draft.settings,
+    texts: draft.texts,
+    size: "large",
+    lng: 32.5,
+    lat: 39.9,
+  });
+  assert.deepEqual(cleanSymbols([symbol]), [symbol], "kept by the rules of the remembered list");
+  assert.equal(placedSymbol({ id: "s9", standardId: "app6d", icon: null, draft }, { lng: 0, lat: 0 }), null, "nothing chosen yet");
+  assert.equal(placedSymbol({ id: "s9", standardId: "app6d", icon: INFANTRY, draft }, { lng: 10, lat: 91 }), null, "off the map");
 });
 
 test("on the map a symbol and its texts get a white outline, so they read on dark and satellite maps", () => {

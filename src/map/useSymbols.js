@@ -1,13 +1,26 @@
 // The military symbol palette's state and the symbols on the map: the chosen
 // standard and its catalogue, the palette's current symbol (the draft), the
 // placed symbols (remembered in the browser) and their MapLibre markers. A
-// placed symbol is dragged to move it and clicked to edit it in the palette.
+// symbol is placed with a click on the map after "place", or dragged out of
+// the palette; the palette then stays on its draft, ready for the next one.
+// A placed symbol is dragged to move it and clicked to edit it in the palette.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readPref, writePref } from "../lib/prefs.js";
 import { PHONE } from "../theme.js";
 import { drawSymbol, loadMilsymbol, loadSymbolCatalog } from "./milsymbol.js";
-import { DEFAULT_SETTINGS, DEFAULT_STANDARD, SYMBOL_SIZES, SYMBOL_STANDARDS, TEXT_MAX, cleanSymbols, composeSidc, settingsForStandard, symbolStandard } from "./symbols.js";
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_STANDARD,
+  SYMBOL_SIZES,
+  SYMBOL_STANDARDS,
+  TEXT_MAX,
+  cleanSymbols,
+  composeSidc,
+  placedSymbol,
+  settingsForStandard,
+  symbolStandard,
+} from "./symbols.js";
 
 const STANDARD_IDS = SYMBOL_STANDARDS.map(({ id }) => id);
 
@@ -29,6 +42,8 @@ function matches(query) {
 }
 
 const SELECTED_FILTER = "drop-shadow(0 0 1.5px #ffffff) drop-shadow(0 0 4px #2563eb)";
+// A press on a placed symbol that travels less than this is a click (edit), not a move.
+const MARKER_CLICK_TOLERANCE = 6;
 
 /**
  * @param {{ map: ReturnType<typeof import("./useMapStage.js").default>, markerLabel: (symbol: object) => string }} options
@@ -148,43 +163,65 @@ export default function useSymbols({ map, markerLabel }) {
   latestRef.current = { icon, sidc, draft, standardId };
   const revealRef = useRef(null);
 
+  // A symbol put on the map stays unselected: the palette keeps its draft,
+  // so the next tile chosen makes another symbol rather than changing this
+  // one. On a phone the palette would cover the map: it closes.
+  const addSymbol = useCallback((symbol) => {
+    if (!symbol) return false;
+    setSymbols((list) => [...list, symbol]);
+    setPlacing(false);
+    live.current.selectedId = null;
+    setSelectedId(null);
+    if (matches(PHONE_QUERY)) setOpen(false);
+    return true;
+  }, []);
+
   useEffect(() => {
     if (!placing) return undefined;
     const slot = map.mapClickRef;
     const canvas = map.getMap()?.getCanvas();
     if (canvas) canvas.style.cursor = "crosshair";
-    slot.current = ({ lng, lat }) => {
-      const { icon: placedIcon, sidc: placedSidc, draft: placedDraft, standardId: placedStandard } = latestRef.current;
-      if (!placedIcon || !placedSidc) return;
-      const symbol = {
-        id: newSymbolId(),
-        standard: placedStandard,
-        icon: placedIcon.id,
-        name: placedIcon.name,
-        sidc: placedSidc,
-        settings: placedDraft.settings,
-        texts: placedDraft.texts,
-        size: placedDraft.size,
-        lng,
-        lat,
-      };
-      setSymbols((list) => [...list, symbol]);
-      setPlacing(false);
-      // On a phone the palette would cover the map: it closes. Elsewhere the
-      // new symbol is selected for editing and kept clear of the palette.
-      if (matches(PHONE_QUERY)) {
-        setOpen(false);
-        setSelectedId(null);
-      } else {
-        revealRef.current = symbol.id;
-        setSelectedId(symbol.id);
-      }
+    slot.current = (lngLat) => {
+      const { icon: placedIcon, draft: placedDraft, standardId: placedStandard } = latestRef.current;
+      addSymbol(placedSymbol({ id: newSymbolId(), standardId: placedStandard, icon: placedIcon, draft: placedDraft }, lngLat));
     };
     return () => {
       slot.current = null;
       if (canvas) canvas.style.cursor = "";
     };
-  }, [placing, map.mapClickRef, map.getMap]);
+  }, [placing, map.mapClickRef, map.getMap, addSymbol]);
+
+  // A catalogue tile or the preview dropped on the map (not on a panel or a
+  // control over it, nor on the space round the globe) is placed there, with
+  // the draft's settings; the tile becomes the draft's symbol.
+  const { lngLatAtClient } = map;
+  const dropSymbol = useCallback(
+    (entry, clientX, clientY) => {
+      const instance = map.getMap();
+      const { catalog: shown, standard: chosen } = live.current;
+      if (!instance || !entry || shown.id !== chosen.catalog) return false;
+      const under = document.elementFromPoint(clientX, clientY);
+      if (!(under instanceof Element) || !instance.getCanvasContainer().contains(under)) return false;
+      const lngLat = lngLatAtClient(clientX, clientY);
+      if (!lngLat) return false;
+      const draftNow = { ...live.current.draft, iconId: entry.id };
+      live.current.draft = draftNow;
+      setDraft(draftNow);
+      return addSymbol(placedSymbol({ id: newSymbolId(), standardId: chosen.id, icon: entry, draft: draftNow }, lngLat));
+    },
+    [map.getMap, lngLatAtClient, addSymbol],
+  );
+
+  // A double-clicked tile becomes the draft's symbol and is placed with the next click on the map.
+  const placeWith = useCallback((entry) => {
+    if (!entry) return;
+    live.current.selectedId = null;
+    setSelectedId(null);
+    const draftNow = { ...live.current.draft, iconId: entry.id };
+    live.current.draft = draftNow;
+    setDraft(draftNow);
+    setPlacing(true);
+  }, []);
 
   const symbolsRef = useRef(symbols);
   symbolsRef.current = symbols;
@@ -284,7 +321,7 @@ export default function useSymbols({ map, markerLabel }) {
         element.tabIndex = 0;
         element.setAttribute("role", "button");
         const id = symbol.id;
-        const marker = new library.Marker({ element, anchor: "top-left", draggable: true, clickTolerance: 3 });
+        const marker = new library.Marker({ element, anchor: "top-left", draggable: true, clickTolerance: MARKER_CLICK_TOLERANCE });
         marker.on("dragend", () => {
           const { lng, lat } = marker.getLngLat().wrap();
           handlersRef.current.move(id, lng, lat);
@@ -355,6 +392,8 @@ export default function useSymbols({ map, markerLabel }) {
     placing,
     startPlacing,
     cancelPlacing,
+    placeWith,
+    dropSymbol,
     newSymbol,
     deleteSelected,
     clearAll,

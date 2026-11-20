@@ -79,6 +79,29 @@ test("the palette offers all seven standards and previews the chosen symbol with
   assert.ok(text.includes(words.symbolPlace));
 });
 
+test("identity is chosen right under the preview, before the catalogue", () => {
+  const html = render(palette(INFANTRY));
+  const preview = html.indexOf("10031000001211000000");
+  const identity = html.indexOf(`aria-label="${words.symbolIdentity}"`);
+  const catalogue = html.indexOf(`aria-label="${words.symbolCatalogue}"`);
+  assert.ok(preview > 0 && identity > preview && catalogue > identity, `${preview} ${identity} ${catalogue}`);
+});
+
+test("place, delete and new stay in a footer under the scrolling body, with the drag hint", () => {
+  const html = render(palette(INFANTRY, { editing: true, count: 1 }));
+  const footer = visibleText(element(html, 'data-palette="actions"'));
+  for (const key of ["symbolPlaceCopy", "symbolDelete", "symbolNew", "symbolDragHint"]) assert.ok(footer.includes(words[key]), key);
+  assert.ok(!visibleText(element(html, 'data-palette="body"')).includes(words.symbolPlaceCopy));
+  const fresh = visibleText(element(render(palette(INFANTRY)), 'data-palette="actions"'));
+  assert.ok(fresh.includes(words.symbolPlace) && !fresh.includes(words.symbolDelete));
+});
+
+test("the preview and the tiles say they can be dragged onto the map", () => {
+  const html = render(palette(INFANTRY));
+  assert.match(element(html, 'data-palette="preview"'), new RegExp(`title="${words.symbolDragTitle}"`));
+  assert.match(element(html, `aria-label="${INFANTRY.name}"`), new RegExp(`title="${INFANTRY.name} — ${words.symbolDragTitle}"`));
+});
+
 test("a unit offers identity, context, status, echelon, the three indicators, sector modifiers, size and the text fields", () => {
   const html = render(palette(INFANTRY, { settings: { identity: "hostile" } }));
   const identities = element(html, `aria-label="${words.symbolIdentity}"`);

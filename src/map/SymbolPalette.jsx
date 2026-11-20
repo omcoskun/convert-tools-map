@@ -3,10 +3,12 @@
 // mobility, headquarters / task force / feint-dummy, sector modifiers, the
 // text fields and the size) and place it on the map. A placed symbol clicked
 // on the map comes back here to be edited, and every change is made to it at
-// once. Unlike the layers panel it stays open while the map is used; Esc and
-// its close button close it, and while a symbol is being placed it shrinks to
-// a bar so the map is free.
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+// once. A catalogue tile or the preview can also be dragged onto the map.
+// Unlike the layers panel it stays open while the map is used; Esc and its
+// close button close it, and while a symbol is being placed it shrinks to a
+// bar so the map is free. The place, delete and new buttons stay in a footer
+// under the scrolling body.
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Disclosure from "../components/Disclosure.jsx";
 import Icon from "../components/Icon.jsx";
 import Segmented from "../components/Segmented.jsx";
@@ -32,6 +34,8 @@ import {
 } from "./symbols.js";
 
 const PAGE = 120;
+// A press that travels this far is a drag, not a click.
+const DRAG_START_PX = 6;
 const ROOM_BELOW = 28;
 const MIN_HEIGHT = 200;
 const SOURCE_URL = "https://github.com/omcoskun/milsymbol";
@@ -154,15 +158,20 @@ function Labeled({ label, children, htmlFor }) {
   );
 }
 
-const Tile = memo(function Tile({ icon, ms, sidc, standard, selected, onChoose }) {
+const Tile = memo(function Tile({ icon, ms, sidc, standard, selected, onChoose, onPlace, onDragStart, dragTitle }) {
   return (
     <Box
       component="button"
       type="button"
       aria-pressed={selected}
       aria-label={icon.name}
-      title={icon.name}
+      title={`${icon.name} — ${dragTitle}`}
       onClick={() => onChoose(icon)}
+      onDoubleClick={() => onPlace(icon)}
+      // A finger scrolls the grid; a mouse or a pen drags the symbol out.
+      onPointerDown={(event) => {
+        if (event.pointerType !== "touch") onDragStart(event, icon);
+      }}
       sx={{
         display: "grid",
         placeItems: "center",
@@ -172,16 +181,123 @@ const Tile = memo(function Tile({ icon, ms, sidc, standard, selected, onChoose }
         borderRadius: `${RADIUS.control}px`,
         bgcolor: selected ? COLORS.aSoft : COLORS.sheet,
         boxShadow: selected ? `0 0 0 1px ${COLORS.selected}` : "none",
-        cursor: "pointer",
+        cursor: "grab",
         "&:hover": { borderColor: COLORS.ink2 },
         "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 1 },
-        "& svg": { maxWidth: "100%", maxHeight: 42, width: "auto", height: "auto" },
+        "& svg": { maxWidth: "100%", maxHeight: 42, width: "auto", height: "auto", pointerEvents: "none" },
       }}
     >
       <Glyph ms={ms} sidc={sidc} standard={standard} size="small" />
     </Box>
   );
 });
+
+/**
+ * Dragging a symbol out of the palette: past DRAG_START_PX the symbol, drawn
+ * as it would be placed, follows the pointer, and a release over the map
+ * places it there (palette.dropSymbol decides what counts as the map). Esc
+ * or a release anywhere else drops nothing. The click that ends a drag is
+ * swallowed, so the tile is not chosen again.
+ */
+function useSymbolDrag(palette) {
+  const liveRef = useRef(palette);
+  liveRef.current = palette;
+  const cleanupRef = useRef(null);
+  useEffect(() => () => cleanupRef.current?.(), []);
+
+  return useCallback((event, icon) => {
+    if (event.button !== 0 || !icon) return;
+    cleanupRef.current?.();
+    const target = event.currentTarget;
+    const { pointerId } = event;
+    const start = { x: event.clientX, y: event.clientY };
+    const at = { ...start };
+    let ghost = null;
+    let anchor = { x: 0, y: 0 };
+    let frame = 0;
+
+    function show() {
+      const { ms, standard, draft } = liveRef.current;
+      if (!ms) return false;
+      let drawn;
+      try {
+        drawn = drawSymbol(ms, { sidc: composeSidc(icon, draft.settings, standard), standard: standard.id, texts: draft.texts, size: draft.size }, { onMap: true });
+      } catch {
+        return false;
+      }
+      ghost = document.createElement("div");
+      ghost.className = "map-symbol-ghost";
+      ghost.setAttribute("aria-hidden", "true");
+      Object.assign(ghost.style, { position: "fixed", left: "0", top: "0", zIndex: "2000", pointerEvents: "none", opacity: "0.9", lineHeight: "0", willChange: "transform" });
+      ghost.innerHTML = drawn.svg;
+      anchor = drawn.anchor;
+      document.body.append(ghost);
+      document.documentElement.style.cursor = "grabbing";
+      try {
+        target.setPointerCapture(pointerId);
+      } catch {
+        // The pointer may already be gone.
+      }
+      return true;
+    }
+    function place() {
+      frame = 0;
+      if (ghost) ghost.style.transform = `translate(${at.x - anchor.x}px, ${at.y - anchor.y}px)`;
+    }
+    function onMove(moveEvent) {
+      if (moveEvent.pointerId !== pointerId) return;
+      at.x = moveEvent.clientX;
+      at.y = moveEvent.clientY;
+      if (!ghost) {
+        const dx = at.x - start.x;
+        const dy = at.y - start.y;
+        if (dx * dx + dy * dy < DRAG_START_PX * DRAG_START_PX || !show()) return;
+      }
+      moveEvent.preventDefault();
+      if (!frame) frame = requestAnimationFrame(place);
+    }
+    function onEnd(endEvent) {
+      if (endEvent.pointerId !== pointerId) return;
+      const dragged = ghost != null;
+      cleanup();
+      if (!dragged) return;
+      swallowClick();
+      if (endEvent.type === "pointerup") liveRef.current.dropSymbol(icon, endEvent.clientX, endEvent.clientY);
+    }
+    function onKey(keyEvent) {
+      if (keyEvent.key !== "Escape" || !ghost) return;
+      keyEvent.preventDefault();
+      keyEvent.stopPropagation();
+      cleanup();
+      swallowClick();
+    }
+    function swallowClick() {
+      const stop = (clickEvent) => {
+        clickEvent.stopPropagation();
+        clickEvent.preventDefault();
+      };
+      window.addEventListener("click", stop, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
+    }
+    function cleanup() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+      window.removeEventListener("keydown", onKey, true);
+      if (frame) cancelAnimationFrame(frame);
+      frame = 0;
+      ghost?.remove();
+      ghost = null;
+      document.documentElement.style.cursor = "";
+      cleanupRef.current = null;
+    }
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    window.addEventListener("keydown", onKey, true);
+    cleanupRef.current = cleanup;
+  }, []);
+}
 
 /**
  * @param {{
@@ -202,6 +318,7 @@ export default function SymbolPalette({ palette, open, onClose }) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   const { standard, catalog, ms, draft, icon, sidc, editing, placing } = palette;
+  const dragSymbol = useSymbolDrag(palette);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const placingRef = useRef(placing);
@@ -219,8 +336,16 @@ export default function SymbolPalette({ palette, open, onClose }) {
       setMaxHeight(Math.max(MIN_HEIGHT, stage.clientHeight - box.offsetTop - panel.offsetTop - ROOM_BELOW));
     }
     fit();
+    // The map area changes height without the window (a phone's tool sheet
+    // opening or closing), so the panel watches the stage itself.
+    const stage = panelRef.current?.offsetParent?.offsetParent;
+    const observer = typeof ResizeObserver === "function" && stage ? new ResizeObserver(fit) : null;
+    observer?.observe(stage);
     window.addEventListener("resize", fit);
-    return () => window.removeEventListener("resize", fit);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", fit);
+    };
   }, [open, placing]);
 
   // Esc stops placing first, then closes the palette.
@@ -282,15 +407,29 @@ export default function SymbolPalette({ palette, open, onClose }) {
     );
   }
 
+  const identity = (
+    <Box>
+      <Box component="h3" sx={sectionTitleSx}>
+        {text.symbolIdentity}
+      </Box>
+      <ChoicePills
+        label={text.symbolIdentity}
+        options={identityChoices(standard).map(({ value }) => ({ value, text: labels.identities[value] }))}
+        value={settings.identity}
+        onChoose={(value) => change({ identity: value })}
+      />
+    </Box>
+  );
+
   return (
     <Box
       ref={panelRef}
       className="map-symbol-palette"
       role="dialog"
       aria-label={text.mapSymbols}
-      sx={{ ...panelSx, maxHeight: maxHeight ?? undefined }}
+      sx={{ ...panelSx, display: "flex", flexDirection: "column", p: 0, overflow: "hidden", maxHeight: maxHeight ?? undefined }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.25 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: "none", p: "10px 8px 8px 14px", borderBottom: `1px solid ${COLORS.rule}` }}>
         <Box component="h2" sx={{ m: 0, flex: 1, fontSize: TYPE.body, fontWeight: 700 }}>
           {text.mapSymbols}
         </Box>
@@ -306,318 +445,338 @@ export default function SymbolPalette({ palette, open, onClose }) {
         </Box>
       </Box>
 
-      <Labeled label={text.symbolStandard} htmlFor="symbol-standard">
-        <Box component="select" id="symbol-standard" value={standard.id} disabled={editing} onChange={(event) => palette.chooseStandard(event.target.value)} sx={fieldSx}>
-          {SYMBOL_STANDARDS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Box>
-      </Labeled>
-      {editing && (
-        <Box component="p" sx={{ m: "6px 0 0", color: COLORS.muted, fontSize: TYPE.meta, lineHeight: 1.4 }}>
-          {text.symbolEditing}
-        </Box>
-      )}
+      <Box data-palette="body" sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "thin", p: 1.5 }}>
+        <Labeled label={text.symbolStandard} htmlFor="symbol-standard">
+          <Box component="select" id="symbol-standard" value={standard.id} disabled={editing} onChange={(event) => palette.chooseStandard(event.target.value)} sx={fieldSx}>
+            {SYMBOL_STANDARDS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </Box>
+        </Labeled>
+        {editing && (
+          <Box component="p" sx={{ m: "6px 0 0", color: COLORS.muted, fontSize: TYPE.meta, lineHeight: 1.4 }}>
+            {text.symbolEditing}
+          </Box>
+        )}
 
-      {/* Preview */}
-      <Box sx={{ display: "flex", gap: 1.25, alignItems: "center", mt: 1.5, p: 1, border: `1px solid ${COLORS.rule}`, borderRadius: `${RADIUS.card}px`, bgcolor: COLORS.paper }}>
-        <Box sx={{ flex: "none", display: "grid", placeItems: "center", width: 96, minHeight: 72, overflow: "hidden", "& svg": { maxWidth: 96, height: "auto" } }}>
-          {ms && sidc ? <Glyph ms={ms} sidc={sidc} standard={standard.id} texts={draft.texts} size="medium" /> : <Spinner />}
-        </Box>
-        <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "3px" }}>
-          <Box component="span" sx={{ fontSize: TYPE.small, fontWeight: 700, lineHeight: 1.3, overflowWrap: "anywhere" }}>
-            {icon?.name ?? "—"}
+        {/* Preview: dragged onto the map, it is placed there. */}
+        <Box
+          data-palette="preview"
+          title={text.symbolDragTitle}
+          onPointerDown={(event) => dragSymbol(event, icon)}
+          sx={{
+            display: "flex",
+            gap: 1.25,
+            alignItems: "center",
+            mt: 1.5,
+            p: 1,
+            border: `1px solid ${COLORS.rule}`,
+            borderRadius: `${RADIUS.card}px`,
+            bgcolor: COLORS.paper,
+            cursor: icon && ms ? "grab" : "default",
+            touchAction: "none",
+            userSelect: "none",
+          }}
+        >
+          <Box sx={{ flex: "none", display: "grid", placeItems: "center", width: 96, minHeight: 72, overflow: "hidden", "& svg": { maxWidth: 96, height: "auto", pointerEvents: "none" } }}>
+            {ms && sidc ? <Glyph ms={ms} sidc={sidc} standard={standard.id} texts={draft.texts} size="medium" /> : <Spinner />}
           </Box>
-          {icon && icon.path.length > 1 && (
-            <Box component="span" sx={{ color: COLORS.muted, fontSize: TYPE.label, lineHeight: 1.35, overflowWrap: "anywhere" }}>
-              {icon.path.slice(0, -1).join(" › ")}
+          <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "3px" }}>
+            <Box component="span" sx={{ fontSize: TYPE.small, fontWeight: 700, lineHeight: 1.3, overflowWrap: "anywhere" }}>
+              {icon?.name ?? "—"}
             </Box>
-          )}
-          {sidc && (
-            <Box component="code" sx={{ color: COLORS.ink2, fontFamily: MONO_FONT, fontSize: TYPE.label, letterSpacing: "0.02em", overflowWrap: "anywhere" }}>
-              {sidc}
-            </Box>
-          )}
+            {icon && icon.path.length > 1 && (
+              <Box component="span" sx={{ color: COLORS.muted, fontSize: TYPE.label, lineHeight: 1.35, overflowWrap: "anywhere" }}>
+                {icon.path.slice(0, -1).join(" › ")}
+              </Box>
+            )}
+            {sidc && (
+              <Box component="code" sx={{ color: COLORS.ink2, fontFamily: MONO_FONT, fontSize: TYPE.label, letterSpacing: "0.02em", overflowWrap: "anywhere" }}>
+                {sidc}
+              </Box>
+            )}
+          </Box>
         </Box>
-      </Box>
 
-      {/* Catalogue */}
-      <Box sx={{ mt: 1.5 }}>
-        {catalog.status === "error" || palette.msFailed ? (
-          <Box role="alert" sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderRadius: `${RADIUS.control}px`, bgcolor: COLORS.warnSoft, color: COLORS.warn, fontSize: TYPE.small, fontWeight: 600 }}>
-            <Icon name="alert" size={16} />
-            <Box component="span" sx={{ flex: 1 }}>
-              {palette.msFailed ? text.symbolRendererFailed : text.symbolLoadFailed}
-            </Box>
-            <Box component="button" type="button" onClick={palette.retry} sx={{ ...actionSx, color: COLORS.warn, borderColor: "currentColor" }}>
-              {text.mapRetry}
-            </Box>
-          </Box>
-        ) : catalog.status !== "ready" ? (
-          <Box role="status" sx={{ display: "flex", alignItems: "center", gap: 1, color: COLORS.muted, fontSize: TYPE.small }}>
-            <Spinner />
-            {text.symbolLoading}
-          </Box>
-        ) : (
-          <>
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
-              <Box
-                component="input"
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={text.symbolSearch}
-                aria-label={text.symbolSearch}
-                sx={fieldSx}
-              />
-              <Box component="select" value={category} onChange={(event) => setCategory(event.target.value)} aria-label={text.symbolCategory} sx={fieldSx}>
-                <option value="">{text.symbolCategoryAll.replace("{count}", format.format(catalog.icons.length))}</option>
-                {categories.map((entry) => (
-                  <option key={entry.category} value={entry.category}>
-                    {`${entry.category} (${format.format(entry.count)})`}
-                  </option>
-                ))}
+        {offers && <Box sx={{ mt: 1.5 }}>{identity}</Box>}
+
+        {/* Catalogue */}
+        <Box sx={{ mt: 1.5 }}>
+          {catalog.status === "error" || palette.msFailed ? (
+            <Box role="alert" sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderRadius: `${RADIUS.control}px`, bgcolor: COLORS.warnSoft, color: COLORS.warn, fontSize: TYPE.small, fontWeight: 600 }}>
+              <Icon name="alert" size={16} />
+              <Box component="span" sx={{ flex: 1 }}>
+                {palette.msFailed ? text.symbolRendererFailed : text.symbolLoadFailed}
+              </Box>
+              <Box component="button" type="button" onClick={palette.retry} sx={{ ...actionSx, color: COLORS.warn, borderColor: "currentColor" }}>
+                {text.mapRetry}
               </Box>
             </Box>
-            <Box component="p" role="status" sx={{ m: "8px 0 6px", color: COLORS.muted, fontSize: TYPE.meta }}>
-              {found.length === 0 ? text.symbolNoResults : text.symbolResults.replace("{count}", format.format(found.length))}
+          ) : catalog.status !== "ready" ? (
+            <Box role="status" sx={{ display: "flex", alignItems: "center", gap: 1, color: COLORS.muted, fontSize: TYPE.small }}>
+              <Spinner />
+              {text.symbolLoading}
             </Box>
-            <Box
-              role="group"
-              aria-label={text.symbolCatalogue}
-              sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(54px, 1fr))", gap: "6px", maxHeight: 232, overflowY: "auto", overscrollBehavior: "contain", p: "2px" }}
-            >
-              {shown.map((entry) => (
-                <Tile
-                  key={entry.id}
-                  icon={entry}
-                  ms={ms}
-                  sidc={composeSidc(entry, tileSettings, standard)}
-                  standard={standard.id}
-                  selected={entry.id === draft.iconId}
-                  onChoose={palette.chooseIcon}
+          ) : (
+            <>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
+                <Box
+                  component="input"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={text.symbolSearch}
+                  aria-label={text.symbolSearch}
+                  sx={fieldSx}
                 />
-              ))}
-              {found.length > shown.length && (
-                <Box component="button" type="button" onClick={() => setLimit((value) => value + PAGE)} sx={{ ...actionSx, gridColumn: "1 / -1", justifyContent: "center" }}>
-                  {text.symbolShowMore}
+                <Box component="select" value={category} onChange={(event) => setCategory(event.target.value)} aria-label={text.symbolCategory} sx={fieldSx}>
+                  <option value="">{text.symbolCategoryAll.replace("{count}", format.format(catalog.icons.length))}</option>
+                  {categories.map((entry) => (
+                    <option key={entry.category} value={entry.category}>
+                      {`${entry.category} (${format.format(entry.count)})`}
+                    </option>
+                  ))}
                 </Box>
+              </Box>
+              <Box component="p" role="status" sx={{ m: "8px 0 6px", color: COLORS.muted, fontSize: TYPE.meta }}>
+                {found.length === 0 ? text.symbolNoResults : text.symbolResults.replace("{count}", format.format(found.length))}
+              </Box>
+              <Box
+                role="group"
+                aria-label={text.symbolCatalogue}
+                sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(54px, 1fr))", gap: "6px", maxHeight: 232, overflowY: "auto", overscrollBehavior: "contain", p: "2px" }}
+              >
+                {shown.map((entry) => (
+                  <Tile
+                    key={entry.id}
+                    icon={entry}
+                    ms={ms}
+                    sidc={composeSidc(entry, tileSettings, standard)}
+                    standard={standard.id}
+                    selected={entry.id === draft.iconId}
+                    onChoose={palette.chooseIcon}
+                    onPlace={palette.placeWith}
+                    onDragStart={dragSymbol}
+                    dragTitle={text.symbolDragTitle}
+                  />
+                ))}
+                {found.length > shown.length && (
+                  <Box component="button" type="button" onClick={() => setLimit((value) => value + PAGE)} sx={{ ...actionSx, gridColumn: "1 / -1", justifyContent: "center" }}>
+                    {text.symbolShowMore}
+                  </Box>
+                )}
+              </Box>
+            </>
+          )}
+        </Box>
+
+        {/* Amplifiers */}
+        {offers && (
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 2 }}>
+            {offers.contexts.length > 1 && (
+              <Box>
+                <Box component="h3" sx={sectionTitleSx}>
+                  {text.symbolContext}
+                </Box>
+                <Segmented
+                  label={text.symbolContext}
+                  size="sm"
+                  options={offers.contexts.map((value) => ({ value, label: labels.contexts[value] }))}
+                  value={offers.contexts.includes(settings.context) ? settings.context : "0"}
+                  onChange={(context) => change({ context })}
+                />
+              </Box>
+            )}
+            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
+              <Labeled label={text.symbolStatus} htmlFor="symbol-status">
+                <Box component="select" id="symbol-status" value={offers.statuses.includes(settings.status) ? settings.status : "present"} onChange={(event) => change({ status: event.target.value })} sx={fieldSx}>
+                  {STATUSES.filter(({ value }) => offers.statuses.includes(value)).map(({ value }) => (
+                    <option key={value} value={value}>
+                      {labels.statuses[value]}
+                    </option>
+                  ))}
+                </Box>
+              </Labeled>
+              {offers.echelon && (
+                <Labeled label={text.symbolEchelon} htmlFor="symbol-echelon">
+                  <Box component="select" id="symbol-echelon" value={settings.echelon} onChange={(event) => change({ echelon: event.target.value })} sx={fieldSx}>
+                    <option value="">{none}</option>
+                    {ECHELONS.map(([value]) => (
+                      <option key={value} value={value}>
+                        {labels.echelons[value]}
+                      </option>
+                    ))}
+                  </Box>
+                </Labeled>
+              )}
+              {offers.mobility && (
+                <Labeled label={text.symbolMobility} htmlFor="symbol-mobility">
+                  <Box component="select" id="symbol-mobility" value={settings.mobility} onChange={(event) => change({ mobility: event.target.value })} sx={fieldSx}>
+                    <option value="">{none}</option>
+                    {MOBILITIES.map(([value]) => (
+                      <option key={value} value={value}>
+                        {labels.mobilities[value]}
+                      </option>
+                    ))}
+                  </Box>
+                </Labeled>
               )}
             </Box>
-          </>
-        )}
-      </Box>
-
-      {/* Amplifiers */}
-      {offers && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 2 }}>
-          <Box>
-            <Box component="h3" sx={sectionTitleSx}>
-              {text.symbolIdentity}
-            </Box>
-            <ChoicePills
-              label={text.symbolIdentity}
-              options={identityChoices(standard).map(({ value }) => ({ value, text: labels.identities[value] }))}
-              value={settings.identity}
-              onChoose={(identity) => change({ identity })}
-            />
-          </Box>
-          {offers.contexts.length > 1 && (
+            {(offers.hq || offers.taskForce || offers.feintDummy) && (
+              <Box>
+                <Box component="h3" sx={sectionTitleSx}>
+                  {text.symbolIndicators}
+                </Box>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                  {offers.hq && (
+                    <Box component="button" type="button" aria-pressed={settings.hq} onClick={() => change({ hq: !settings.hq })} sx={pillSx}>
+                      {text.symbolHq}
+                    </Box>
+                  )}
+                  {offers.taskForce && (
+                    <Box component="button" type="button" aria-pressed={settings.taskForce} onClick={() => change({ taskForce: !settings.taskForce })} sx={pillSx}>
+                      {text.symbolTaskForce}
+                    </Box>
+                  )}
+                  {offers.feintDummy && (
+                    <Box component="button" type="button" aria-pressed={settings.feintDummy} onClick={() => change({ feintDummy: !settings.feintDummy })} sx={pillSx}>
+                      {text.symbolFeintDummy}
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            )}
+            {(modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0) && (
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
+                {modifierLists["1"]?.length > 0 && (
+                  <Labeled label={text.symbolModifier1} htmlFor="symbol-modifier-1">
+                    <Box component="select" id="symbol-modifier-1" value={settings.modifier1} onChange={(event) => change({ modifier1: event.target.value })} sx={fieldSx}>
+                      <option value="00">{none}</option>
+                      {modifierLists["1"].map(([code, name]) => (
+                        <option key={code} value={code}>
+                          {name}
+                        </option>
+                      ))}
+                    </Box>
+                  </Labeled>
+                )}
+                {modifierLists["2"]?.length > 0 && (
+                  <Labeled label={text.symbolModifier2} htmlFor="symbol-modifier-2">
+                    <Box component="select" id="symbol-modifier-2" value={settings.modifier2} onChange={(event) => change({ modifier2: event.target.value })} sx={fieldSx}>
+                      <option value="00">{none}</option>
+                      {modifierLists["2"].map(([code, name]) => (
+                        <option key={code} value={code}>
+                          {name}
+                        </option>
+                      ))}
+                    </Box>
+                  </Labeled>
+                )}
+              </Box>
+            )}
             <Box>
               <Box component="h3" sx={sectionTitleSx}>
-                {text.symbolContext}
+                {text.symbolSize}
               </Box>
               <Segmented
-                label={text.symbolContext}
+                label={text.symbolSize}
                 size="sm"
-                options={offers.contexts.map((value) => ({ value, label: labels.contexts[value] }))}
-                value={offers.contexts.includes(settings.context) ? settings.context : "0"}
-                onChange={(context) => change({ context })}
+                options={["small", "medium", "large"].map((value) => ({ value, label: labels.sizes[value] }))}
+                value={draft.size}
+                onChange={palette.chooseSize}
               />
             </Box>
-          )}
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
-            <Labeled label={text.symbolStatus} htmlFor="symbol-status">
-              <Box component="select" id="symbol-status" value={offers.statuses.includes(settings.status) ? settings.status : "present"} onChange={(event) => change({ status: event.target.value })} sx={fieldSx}>
-                {STATUSES.filter(({ value }) => offers.statuses.includes(value)).map(({ value }) => (
-                  <option key={value} value={value}>
-                    {labels.statuses[value]}
-                  </option>
+            <Disclosure title={text.symbolTexts} defaultOpen={Object.keys(draft.texts).length > 0}>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
+                {TEXT_FIELDS.map(({ key, code }) => (
+                  <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>
+                    <Box
+                      component="input"
+                      id={`symbol-text-${key}`}
+                      type="text"
+                      inputMode={key === "direction" ? "decimal" : undefined}
+                      maxLength={TEXT_MAX}
+                      value={draft.texts[key] ?? ""}
+                      onChange={(event) => palette.changeText(key, event.target.value)}
+                      sx={fieldSx}
+                    />
+                  </Labeled>
                 ))}
               </Box>
-            </Labeled>
-            {offers.echelon && (
-              <Labeled label={text.symbolEchelon} htmlFor="symbol-echelon">
-                <Box component="select" id="symbol-echelon" value={settings.echelon} onChange={(event) => change({ echelon: event.target.value })} sx={fieldSx}>
-                  <option value="">{none}</option>
-                  {ECHELONS.map(([value]) => (
-                    <option key={value} value={value}>
-                      {labels.echelons[value]}
-                    </option>
-                  ))}
-                </Box>
-              </Labeled>
-            )}
-            {offers.mobility && (
-              <Labeled label={text.symbolMobility} htmlFor="symbol-mobility">
-                <Box component="select" id="symbol-mobility" value={settings.mobility} onChange={(event) => change({ mobility: event.target.value })} sx={fieldSx}>
-                  <option value="">{none}</option>
-                  {MOBILITIES.map(([value]) => (
-                    <option key={value} value={value}>
-                      {labels.mobilities[value]}
-                    </option>
-                  ))}
-                </Box>
-              </Labeled>
-            )}
+            </Disclosure>
           </Box>
-          {(offers.hq || offers.taskForce || offers.feintDummy) && (
-            <Box>
-              <Box component="h3" sx={sectionTitleSx}>
-                {text.symbolIndicators}
-              </Box>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                {offers.hq && (
-                  <Box component="button" type="button" aria-pressed={settings.hq} onClick={() => change({ hq: !settings.hq })} sx={pillSx}>
-                    {text.symbolHq}
-                  </Box>
-                )}
-                {offers.taskForce && (
-                  <Box component="button" type="button" aria-pressed={settings.taskForce} onClick={() => change({ taskForce: !settings.taskForce })} sx={pillSx}>
-                    {text.symbolTaskForce}
-                  </Box>
-                )}
-                {offers.feintDummy && (
-                  <Box component="button" type="button" aria-pressed={settings.feintDummy} onClick={() => change({ feintDummy: !settings.feintDummy })} sx={pillSx}>
-                    {text.symbolFeintDummy}
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          )}
-          {(modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0) && (
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
-              {modifierLists["1"]?.length > 0 && (
-                <Labeled label={text.symbolModifier1} htmlFor="symbol-modifier-1">
-                  <Box component="select" id="symbol-modifier-1" value={settings.modifier1} onChange={(event) => change({ modifier1: event.target.value })} sx={fieldSx}>
-                    <option value="00">{none}</option>
-                    {modifierLists["1"].map(([code, name]) => (
-                      <option key={code} value={code}>
-                        {name}
-                      </option>
-                    ))}
-                  </Box>
-                </Labeled>
-              )}
-              {modifierLists["2"]?.length > 0 && (
-                <Labeled label={text.symbolModifier2} htmlFor="symbol-modifier-2">
-                  <Box component="select" id="symbol-modifier-2" value={settings.modifier2} onChange={(event) => change({ modifier2: event.target.value })} sx={fieldSx}>
-                    <option value="00">{none}</option>
-                    {modifierLists["2"].map(([code, name]) => (
-                      <option key={code} value={code}>
-                        {name}
-                      </option>
-                    ))}
-                  </Box>
-                </Labeled>
-              )}
-            </Box>
-          )}
-          <Box>
-            <Box component="h3" sx={sectionTitleSx}>
-              {text.symbolSize}
-            </Box>
-            <Segmented
-              label={text.symbolSize}
-              size="sm"
-              options={["small", "medium", "large"].map((value) => ({ value, label: labels.sizes[value] }))}
-              value={draft.size}
-              onChange={palette.chooseSize}
-            />
-          </Box>
-          <Disclosure title={text.symbolTexts} defaultOpen={Object.keys(draft.texts).length > 0}>
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
-              {TEXT_FIELDS.map(({ key, code }) => (
-                <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>
-                  <Box
-                    component="input"
-                    id={`symbol-text-${key}`}
-                    type="text"
-                    inputMode={key === "direction" ? "decimal" : undefined}
-                    maxLength={TEXT_MAX}
-                    value={draft.texts[key] ?? ""}
-                    onChange={(event) => palette.changeText(key, event.target.value)}
-                    sx={fieldSx}
-                  />
-                </Labeled>
-              ))}
-            </Box>
-          </Disclosure>
-        </Box>
-      )}
-
-      {/* Actions */}
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 2 }}>
-        <Box component="button" type="button" onClick={palette.startPlacing} disabled={!icon || !sidc || !ms} sx={primarySx}>
-          <Icon name="plus" size={16} />
-          {editing ? text.symbolPlaceCopy : text.symbolPlace}
-        </Box>
-        {editing && (
-          <>
-            <Box component="button" type="button" onClick={palette.deleteSelected} sx={{ ...actionSx, color: COLORS.error }}>
-              {text.symbolDelete}
-            </Box>
-            <Box component="button" type="button" onClick={palette.newSymbol} sx={actionSx}>
-              {text.symbolNew}
-            </Box>
-          </>
         )}
+
+        <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mt: 2, pt: 1.25, borderTop: `1px solid ${COLORS.rule}`, color: COLORS.muted, fontSize: TYPE.meta }}>
+          {confirmClear ? (
+            <>
+              <Box component="span" role="alert" sx={{ flex: 1, color: COLORS.ink, fontWeight: 650 }}>
+                {text.symbolClearAsk.replace("{count}", format.format(palette.count))}
+              </Box>
+              <Box
+                component="button"
+                type="button"
+                onClick={() => {
+                  palette.clearAll();
+                  setConfirmClear(false);
+                }}
+                sx={{ ...actionSx, minHeight: 30, color: COLORS.error }}
+              >
+                {text.symbolClearYes}
+              </Box>
+              <Box component="button" type="button" onClick={() => setConfirmClear(false)} sx={{ ...actionSx, minHeight: 30 }}>
+                {text.mapCancel}
+              </Box>
+            </>
+          ) : (
+            <>
+              <Box component="span" sx={{ flex: 1 }}>
+                {countText}
+              </Box>
+              {palette.count > 0 && (
+                <Box component="button" type="button" onClick={() => setConfirmClear(true)} sx={{ ...actionSx, minHeight: 30, fontSize: TYPE.meta }}>
+                  {text.symbolClearAll}
+                </Box>
+              )}
+            </>
+          )}
+        </Box>
+        <Box component="p" sx={{ m: "8px 0 0", color: COLORS.faint, fontSize: TYPE.label }}>
+          <Box component="a" href={SOURCE_URL} target="_blank" rel="noopener noreferrer" sx={{ color: "inherit" }}>
+            {text.symbolSource}
+          </Box>
+        </Box>
       </Box>
 
-      <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mt: 1.5, pt: 1.25, borderTop: `1px solid ${COLORS.rule}`, color: COLORS.muted, fontSize: TYPE.meta }}>
-        {confirmClear ? (
-          <>
-            <Box component="span" role="alert" sx={{ flex: 1, color: COLORS.ink, fontWeight: 650 }}>
-              {text.symbolClearAsk.replace("{count}", format.format(palette.count))}
-            </Box>
-            <Box
-              component="button"
-              type="button"
-              onClick={() => {
-                palette.clearAll();
-                setConfirmClear(false);
-              }}
-              sx={{ ...actionSx, minHeight: 30, color: COLORS.error }}
-            >
-              {text.symbolClearYes}
-            </Box>
-            <Box component="button" type="button" onClick={() => setConfirmClear(false)} sx={{ ...actionSx, minHeight: 30 }}>
-              {text.mapCancel}
-            </Box>
-          </>
-        ) : (
-          <>
-            <Box component="span" sx={{ flex: 1 }}>
-              {countText}
-            </Box>
-            {palette.count > 0 && (
-              <Box component="button" type="button" onClick={() => setConfirmClear(true)} sx={{ ...actionSx, minHeight: 30, fontSize: TYPE.meta }}>
-                {text.symbolClearAll}
+      {/* Actions: always in view, whatever the body's scroll. */}
+      <Box data-palette="actions" sx={{ flex: "none", p: "10px 12px 12px", borderTop: `1px solid ${COLORS.rule}`, bgcolor: COLORS.paper }}>
+        {/* One row: the place button takes the room the edit buttons leave. */}
+        <Box sx={{ display: "flex", gap: 0.75, "& > button": { px: "11px", whiteSpace: "nowrap" } }}>
+          <Box component="button" type="button" onClick={palette.startPlacing} disabled={!icon || !sidc || !ms} sx={{ ...primarySx, flex: "1 1 auto", justifyContent: "center", minWidth: 0 }}>
+            <Icon name="plus" size={16} />
+            {editing ? text.symbolPlaceCopy : text.symbolPlace}
+          </Box>
+          {editing && (
+            <>
+              <Box component="button" type="button" onClick={palette.deleteSelected} sx={{ ...actionSx, color: COLORS.error }}>
+                {text.symbolDelete}
               </Box>
-            )}
-          </>
-        )}
-      </Box>
-      <Box component="p" sx={{ m: "8px 0 0", color: COLORS.faint, fontSize: TYPE.label }}>
-        <Box component="a" href={SOURCE_URL} target="_blank" rel="noopener noreferrer" sx={{ color: "inherit" }}>
-          {text.symbolSource}
+              <Box component="button" type="button" onClick={palette.newSymbol} sx={actionSx}>
+                {text.symbolNew}
+              </Box>
+            </>
+          )}
+        </Box>
+        <Box component="p" sx={{ m: "8px 0 0", color: COLORS.muted, fontSize: TYPE.label, lineHeight: 1.35 }}>
+          {text.symbolDragHint}
         </Box>
       </Box>
     </Box>
   );
 }
+
 
 const panelSx = {
   width: 336,

@@ -1181,7 +1181,9 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
             "CooperativeGesturesHandler.MacHelpText": latest.labels.gestures.mac,
             "CooperativeGesturesHandler.MobileHelpText": latest.labels.gestures.mobile,
           },
-          clickTolerance: 4,
+          // A click may travel a few pixels (a mouse nudged as it is pressed)
+          // and still be a click, not a small pan.
+          clickTolerance: 6,
           fadeDuration: 120,
           // Sharp enough on any screen; a 3x phone draws 2.25x fewer pixels.
           pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
@@ -1770,6 +1772,15 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
   }, []);
 
   /** The page's address with the map's current view (also written to the address bar). */
+  /** The point of the map under a point of the window, wrapped into ±180°; null off the map or over space. */
+  const lngLatAtClient = useCallback((clientX, clientY) => {
+    const map = mapRef.current;
+    if (!map) return null;
+    const box = map.getCanvas().getBoundingClientRect();
+    const lngLat = lngLatOnMap(map, { x: clientX - box.left, y: clientY - box.top });
+    return lngLat ? lngLat.wrap() : null;
+  }, []);
+
   const viewLink = useCallback(() => {
     writeViewLinkRef.current?.();
     return window.location.href;
@@ -1811,6 +1822,7 @@ export default function useMapStage({ basemaps, defaultBasemap, terrain = null, 
     getMap: useCallback(() => mapRef.current, []),
     getLibrary: useCallback(() => libraryRef.current, []),
     mapClickRef,
+    lngLatAtClient,
     // Whether the satellite map draws MapTiler's close-up imagery: the build
     // has a key, MapTiler answered its TileJSON and has not refused it since.
     detailImagery: Boolean(MAPTILER_KEY) && detailReady && !detailRefused,
