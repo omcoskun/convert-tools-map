@@ -5,6 +5,30 @@
 /** @param {Record<string, string>} text */
 export function symbolLabels(text) {
   return {
+    tabs: {
+      favorites: text.symbolTabFavorites,
+      units: text.symbolTabUnits,
+      equipment: text.symbolTabEquipment,
+      search: text.symbolTabSearch,
+      properties: text.symbolTabProperties,
+    },
+    groups: {
+      frames: text.symbolGroupFrames,
+      command: text.symbolGroupCommand,
+      manoeuvre: text.symbolGroupManoeuvre,
+      fires: text.symbolGroupFires,
+      aviation: text.symbolGroupAviation,
+      protection: text.symbolGroupProtection,
+      sustainment: text.symbolGroupSustainment,
+      special: text.symbolGroupSpecial,
+      installations: text.symbolGroupInstallations,
+      weapons: text.symbolGroupWeapons,
+      vehicles: text.symbolGroupVehicles,
+      aircraft: text.symbolGroupAircraft,
+      drones: text.symbolGroupDrones,
+      ships: text.symbolGroupShips,
+      subsurface: text.symbolGroupSubsurface,
+    },
     identities: {
       friend: text.symbolFriend,
       hostile: text.symbolHostile,

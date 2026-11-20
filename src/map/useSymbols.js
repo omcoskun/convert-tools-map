@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { readPref, writePref } from "../lib/prefs.js";
 import { PHONE } from "../theme.js";
 import { drawSymbol, loadMilsymbol, loadSymbolCatalog } from "./milsymbol.js";
+import { GALLERY_TABS, cleanFavorites, toggleFavorite as toggledFavorites } from "./symbol-gallery.js";
 import {
   DEFAULT_SETTINGS,
   DEFAULT_STANDARD,
@@ -52,6 +53,8 @@ export default function useSymbols({ map, markerLabel }) {
   const [open, setOpen] = useState(false);
   const [symbols, setSymbols] = useState(() => cleanSymbols(readPref("map-symbols", [])));
   const [standardId, setStandardId] = useState(() => readPref("map-symbol-standard", DEFAULT_STANDARD, STANDARD_IDS));
+  const [favorites, setFavorites] = useState(() => cleanFavorites(readPref("map-symbol-favorites", {})));
+  const [tab, setTab] = useState("units");
   const [catalog, setCatalog] = useState({ id: null, status: "idle", icons: [], modifiers: {} });
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [ms, setMs] = useState(null);
@@ -108,6 +111,7 @@ export default function useSymbols({ map, markerLabel }) {
 
   useEffect(() => writePref("map-symbols", symbols), [symbols]);
   useEffect(() => writePref("map-symbol-standard", standardId), [standardId]);
+  useEffect(() => writePref("map-symbol-favorites", favorites), [favorites]);
 
   // ---- The draft, and the placed symbol it edits ----------------------------
   // A change to the draft is also made to the selected symbol, when there is one.
@@ -152,6 +156,13 @@ export default function useSymbols({ map, markerLabel }) {
     },
     [selectedId],
   );
+  const chooseTab = useCallback((next) => {
+    if (GALLERY_TABS.includes(next)) setTab(next);
+  }, []);
+  const toggleFavorite = useCallback((iconId) => {
+    if (!iconId) return;
+    setFavorites((current) => toggledFavorites(current, live.current.standard.id, iconId));
+  }, []);
 
   // ---- Placing, selecting, removing ------------------------------------------
   const startPlacing = useCallback(() => {
@@ -233,6 +244,7 @@ export default function useSymbols({ map, markerLabel }) {
     setSelectedId(id);
     setStandardId(symbol.standard);
     setDraft({ iconId: symbol.icon, settings: symbol.settings, texts: symbol.texts, size: symbol.size });
+    setTab("properties");
     setOpen(true);
   }, []);
 
@@ -398,5 +410,9 @@ export default function useSymbols({ map, markerLabel }) {
     deleteSelected,
     clearAll,
     count: symbols.length,
+    favorites: favorites[standard.id] ?? [],
+    toggleFavorite,
+    tab,
+    chooseTab,
   };
 }

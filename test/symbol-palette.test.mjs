@@ -37,6 +37,8 @@ function palette(icon, overrides = {}) {
     editing: false,
     placing: false,
     count: 0,
+    tab: "units",
+    favorites: [],
     ...overrides,
     chooseStandard: noop,
     chooseIcon: noop,
@@ -49,6 +51,10 @@ function palette(icon, overrides = {}) {
     deleteSelected: noop,
     clearAll: noop,
     retry: noop,
+    chooseTab: noop,
+    toggleFavorite: noop,
+    placeWith: noop,
+    dropSymbol: noop,
   };
 }
 
@@ -65,7 +71,7 @@ function render(value) {
 }
 
 test("the palette offers all seven standards and previews the chosen symbol with its SIDC", () => {
-  const html = render(palette(INFANTRY));
+  const html = render(palette(INFANTRY, { tab: "properties" }));
   const select = element(html, 'id="symbol-standard"');
   assert.deepEqual(
     [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]),
@@ -79,12 +85,11 @@ test("the palette offers all seven standards and previews the chosen symbol with
   assert.ok(text.includes(words.symbolPlace));
 });
 
-test("identity is chosen right under the preview, before the catalogue", () => {
-  const html = render(palette(INFANTRY));
+test("identity is chosen right under the preview, on the properties tab", () => {
+  const html = render(palette(INFANTRY, { tab: "properties" }));
   const preview = html.indexOf("10031000001211000000");
   const identity = html.indexOf(`aria-label="${words.symbolIdentity}"`);
-  const catalogue = html.indexOf(`aria-label="${words.symbolCatalogue}"`);
-  assert.ok(preview > 0 && identity > preview && catalogue > identity, `${preview} ${identity} ${catalogue}`);
+  assert.ok(preview > 0 && identity > preview, `${preview} ${identity}`);
 });
 
 test("place, delete and new stay in a footer under the scrolling body, with the drag hint", () => {
@@ -97,13 +102,14 @@ test("place, delete and new stay in a footer under the scrolling body, with the 
 });
 
 test("the preview and the tiles say they can be dragged onto the map", () => {
+  const preview = render(palette(INFANTRY, { tab: "properties" }));
+  assert.match(element(preview, 'data-palette="preview"'), new RegExp(`title="${words.symbolDragTitle}"`));
   const html = render(palette(INFANTRY));
-  assert.match(element(html, 'data-palette="preview"'), new RegExp(`title="${words.symbolDragTitle}"`));
   assert.match(element(html, `aria-label="${INFANTRY.name}"`), new RegExp(`title="${INFANTRY.name} — ${words.symbolDragTitle}"`));
 });
 
 test("a unit offers identity, context, status, echelon, the three indicators, sector modifiers, size and the text fields", () => {
-  const html = render(palette(INFANTRY, { settings: { identity: "hostile" } }));
+  const html = render(palette(INFANTRY, { tab: "properties", settings: { identity: "hostile" } }));
   const identities = element(html, `aria-label="${words.symbolIdentity}"`);
   assert.equal([...identities.matchAll(/role="radio"/g)].length, 7);
   assert.match(identities, /aria-checked="true"[^>]*>Düşman</);
@@ -121,7 +127,7 @@ test("a unit offers identity, context, status, echelon, the three indicators, se
 });
 
 test("equipment offers mobility instead of the echelon and the unit indicators", () => {
-  const html = render(palette(TANK));
+  const html = render(palette(TANK, { tab: "properties" }));
   assert.ok(element(html, 'id="symbol-mobility"').includes(words.symbolTracked));
   assert.equal(element(html, 'id="symbol-echelon"'), null);
   const text = visibleText(html);
@@ -130,7 +136,7 @@ test("equipment offers mobility instead of the echelon and the unit indicators",
 });
 
 test("a placed symbol is edited in its own standard, and can be copied, deleted or left", () => {
-  const html = render(palette(INFANTRY, { editing: true, count: 3 }));
+  const html = render(palette(INFANTRY, { editing: true, count: 3, tab: "properties" }));
   assert.match(element(html, 'id="symbol-standard"'), /disabled/);
   const text = visibleText(html);
   for (const key of ["symbolEditing", "symbolPlaceCopy", "symbolDelete", "symbolNew", "symbolClearAll"]) {
@@ -150,10 +156,71 @@ test("the palette renders in English with no missing text", () => {
       createElement(
         LanguageContext.Provider,
         { value: { language: "en", ...lang.en } },
-        createElement(SymbolPalette, { palette: palette(INFANTRY, { editing: true, count: 1 }), open: true, onClose() {} }),
+        createElement(SymbolPalette, { palette: palette(INFANTRY, { editing: true, count: 1, tab: "properties" }), open: true, onClose() {} }),
       ),
     ),
   );
   assert.doesNotMatch(visibleText(html), /undefined|NaN|\[object Object\]/);
   assert.ok(visibleText(html).includes(lang.en.text.mapSymbols));
+});
+
+test("the palette's tabs are favourites, units, equipment, search and properties, the chosen one selected", () => {
+  const html = render(palette(INFANTRY));
+  const tablist = element(html, `aria-label="${words.symbolTabs}"`);
+  assert.deepEqual([...tablist.matchAll(/id="symbol-tab-([a-z]+)"/g)].map((match) => match[1]), ["favorites", "units", "equipment", "search", "properties"]);
+  assert.match(element(html, 'id="symbol-tab-units"'), /aria-selected="true"/);
+  assert.match(element(html, 'id="symbol-tab-search"'), /aria-selected="false"/);
+  assert.equal(visibleText(tablist), `${words.symbolTabFavorites} ${words.symbolTabUnits} ${words.symbolTabEquipment} ${words.symbolTabSearch} ${words.symbolTabProperties}`);
+  assert.match(element(html, 'role="tabpanel"'), /aria-labelledby="symbol-tab-units"/);
+});
+
+test("the units tab shows APP-6D's eight sections, drawn in the quick switch's identity", () => {
+  const html = render(palette(INFANTRY));
+  assert.deepEqual([...html.matchAll(/data-gallery-section="([a-z]+)"/g)].map((match) => match[1]), ["frames", "command", "manoeuvre", "fires", "aviation", "protection", "sustainment", "special"]);
+  assert.ok(visibleText(html).includes(`${words.symbolGroupManoeuvre} (9)`));
+  const hostile = render(palette(INFANTRY, { settings: { identity: "hostile" } }));
+  assert.notEqual(element(html, `aria-label="${INFANTRY.name}"`), element(hostile, `aria-label="${INFANTRY.name}"`));
+});
+
+test("the equipment tab shows the seven sections of equipment and installations", () => {
+  const html = render(palette(TANK, { tab: "equipment" }));
+  assert.deepEqual([...html.matchAll(/data-gallery-section="([a-z]+)"/g)].map((match) => match[1]), ["installations", "weapons", "vehicles", "aircraft", "drones", "ships", "subsurface"]);
+  assert.ok(visibleText(html).includes(`${words.symbolGroupWeapons} (9)`));
+});
+
+test("the quick switch sets identity and present or planned on the gallery tabs, not on the properties", () => {
+  const html = render(palette(INFANTRY));
+  assert.equal([...element(html, 'id="symbol-quick-identity"').matchAll(/<option /g)].length, 7);
+  assert.deepEqual([...element(html, 'id="symbol-quick-status"').matchAll(/<option value="([a-zA-Z]+)"/g)].map((match) => match[1]), ["present", "planned"]);
+  const damaged = render(palette(INFANTRY, { settings: { status: "damaged" } }));
+  assert.deepEqual([...element(damaged, 'id="symbol-quick-status"').matchAll(/<option value="([a-zA-Z]+)"/g)].map((match) => match[1]), ["present", "planned", "damaged"]);
+  assert.equal(element(render(palette(INFANTRY, { tab: "properties" })), 'id="symbol-quick-identity"'), null);
+});
+
+test("the search tab lists symbols as rows with their name, path and code, sixty at a time", () => {
+  const html = render(palette(INFANTRY, { tab: "search" }));
+  const list = element(html, `aria-label="${words.symbolCatalogue}"`);
+  assert.ok(list.startsWith("<ul"));
+  assert.equal([...list.matchAll(/<li/g)].length, 60);
+  assert.ok(visibleText(html).includes(words.symbolShowMore));
+  assert.ok(element(html, `aria-label="${words.symbolSearch}"`));
+  assert.ok(element(html, `aria-label="${words.symbolCategory}"`));
+  const row = visibleText(list.match(/<li[\s\S]*?<\/li>/)[0]);
+  assert.match(row, /\d\d-\d{6}/, "a numeric code");
+});
+
+test("favourites: an empty tab says how to add one; starred symbols are its tiles", () => {
+  assert.ok(visibleText(render(palette(INFANTRY, { tab: "favorites" }))).includes(words.symbolFavoritesEmpty));
+  const html = render(palette(INFANTRY, { tab: "favorites", favorites: [TANK.id, INFANTRY.id] }));
+  // The favourites tab button is named by a hidden span, so the first element with this aria-label is the grid.
+  const grid = element(html, `aria-label="${words.symbolTabFavorites}"`);
+  assert.deepEqual([...grid.matchAll(/<button[^>]*aria-label="([^"]+)"/g)].map((match) => match[1]), [TANK.name, INFANTRY.name]);
+});
+
+test("the footer shows the chosen symbol with its code and a star to keep it", () => {
+  const footer = element(render(palette(INFANTRY)), 'data-palette="actions"');
+  assert.ok(visibleText(footer).includes(`${INFANTRY.name} 10-121100`));
+  assert.match(footer, new RegExp(`aria-pressed="false"[^>]*aria-label="${words.symbolFavoriteAdd}"|aria-label="${words.symbolFavoriteAdd}"[^>]*aria-pressed="false"`));
+  const starred = element(render(palette(INFANTRY, { favorites: [INFANTRY.id] })), 'data-palette="actions"');
+  assert.match(starred, new RegExp(`aria-pressed="true"[^>]*aria-label="${words.symbolFavoriteRemove}"|aria-label="${words.symbolFavoriteRemove}"[^>]*aria-pressed="true"`));
 });

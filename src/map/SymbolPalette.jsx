@@ -1,303 +1,25 @@
-// The military symbol palette: choose a standard, find a symbol in its
-// catalogue, set its amplifiers (identity, context, status, echelon or
-// mobility, headquarters / task force / feint-dummy, sector modifiers, the
-// text fields and the size) and place it on the map. A placed symbol clicked
-// on the map comes back here to be edited, and every change is made to it at
-// once. A catalogue tile or the preview can also be dragged onto the map.
-// Unlike the layers panel it stays open while the map is used; Esc and its
-// close button close it, and while a symbol is being placed it shrinks to a
-// bar so the map is free. The place, delete and new buttons stay in a footer
-// under the scrolling body.
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Disclosure from "../components/Disclosure.jsx";
+// The military symbol palette, after map.army: a header with the standard, a
+// quick identity and status switch, tabs for favourites, units, equipment,
+// search and properties, and a footer with the chosen symbol, its star and the
+// place buttons. The gallery and the properties live in their own files; this
+// shell keeps the panel's fit to the map, Esc, the clear confirmation and the
+// bar it shrinks to while a symbol is placed.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Icon from "../components/Icon.jsx";
-import Segmented from "../components/Segmented.jsx";
 import { useLanguage } from "../context.js";
 import { nextIndexForKey } from "../lib/roving.js";
-import { COLORS, MONO_FONT, PHONE, RADIUS, SHADOW, TYPE, UI_FONT } from "../theme.js";
-import { Box } from "../ui/index.js";
-import { drawSymbol } from "./milsymbol.js";
+import { COLORS, MONO_FONT, RADIUS, TYPE } from "../theme.js";
+import { Box, visuallyHidden } from "../ui/index.js";
+import SymbolEditor from "./SymbolEditor.jsx";
+import SymbolGallery from "./SymbolGallery.jsx";
+import { GALLERY_TABS, symbolCode } from "./symbol-gallery.js";
 import { symbolLabels } from "./symbol-labels.js";
-import {
-  DEFAULT_SETTINGS,
-  ECHELONS,
-  MOBILITIES,
-  SYMBOL_STANDARDS,
-  STATUSES,
-  TEXT_FIELDS,
-  TEXT_MAX,
-  composeSidc,
-  identityChoices,
-  searchSymbols,
-  symbolCategories,
-  symbolOffers,
-} from "./symbols.js";
+import { Glyph, Labeled, actionSx, fieldSx, panelSx, primarySx } from "./symbol-parts.jsx";
+import { SYMBOL_STANDARDS, identityChoices } from "./symbols.js";
 
-const PAGE = 120;
-// A press that travels this far is a drag, not a click.
-const DRAG_START_PX = 6;
 const ROOM_BELOW = 28;
 const MIN_HEIGHT = 200;
 const SOURCE_URL = "https://github.com/omcoskun/milsymbol";
-
-const sectionTitleSx = { m: 0, mb: 0.75, fontSize: TYPE.label, fontWeight: 650, letterSpacing: "0.08em", textTransform: "uppercase", color: COLORS.muted };
-
-const fieldSx = {
-  boxSizing: "border-box",
-  width: "100%",
-  minWidth: 0,
-  height: 34,
-  px: 1,
-  border: `1px solid ${COLORS.rule2}`,
-  borderRadius: `${RADIUS.control}px`,
-  bgcolor: COLORS.sheet,
-  color: COLORS.ink,
-  font: "inherit",
-  fontSize: TYPE.small,
-  "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 0, borderColor: COLORS.focus },
-  "&:disabled": { opacity: 0.6 },
-  [PHONE]: { height: 40, fontSize: 16 },
-};
-
-const pillSx = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "6px",
-  minHeight: 30,
-  px: "10px",
-  border: `1px solid ${COLORS.rule2}`,
-  borderRadius: `${RADIUS.pill}px`,
-  bgcolor: COLORS.sheet,
-  color: COLORS.ink2,
-  font: "inherit",
-  fontSize: TYPE.meta,
-  fontWeight: 600,
-  cursor: "pointer",
-  "&:hover": { borderColor: COLORS.ink2, color: COLORS.ink },
-  "&[aria-checked='true'], &[aria-pressed='true']": { bgcolor: COLORS.selected, borderColor: COLORS.selected, color: COLORS.onSelected },
-  "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 1 },
-  [PHONE]: { minHeight: 36 },
-};
-
-const actionSx = {
-  ...pillSx,
-  minHeight: 34,
-  px: "14px",
-  fontSize: TYPE.small,
-  fontWeight: 650,
-  color: COLORS.ink,
-  "&:disabled": { opacity: 0.45, cursor: "default" },
-  [PHONE]: { minHeight: 40 },
-};
-
-const primarySx = {
-  ...actionSx,
-  bgcolor: COLORS.a,
-  borderColor: COLORS.a,
-  color: "#ffffff",
-  "&:hover:not(:disabled)": { bgcolor: COLORS.aInk, borderColor: COLORS.aInk, color: "#ffffff" },
-};
-
-/** milsymbol's SVG of a code; milsymbol escapes the texts it writes. */
-const Glyph = memo(function Glyph({ ms, sidc, standard, texts, size }) {
-  const markup = useMemo(() => {
-    if (!ms || !sidc) return "";
-    try {
-      return drawSymbol(ms, { sidc, standard, texts, size }).svg;
-    } catch {
-      return "";
-    }
-  }, [ms, sidc, standard, texts, size]);
-  return <Box component="span" aria-hidden="true" sx={{ display: "grid", placeItems: "center", lineHeight: 0 }} dangerouslySetInnerHTML={{ __html: markup }} />;
-});
-
-/** A wrapping radio group of pills: Tab enters at the checked one, the arrows move and choose. */
-function ChoicePills({ label, options, value, onChoose }) {
-  const refs = useRef([]);
-  refs.current.length = options.length;
-  const checkedIndex = options.findIndex((option) => option.value === value);
-  function onKey(event) {
-    const current = refs.current.indexOf(event.target);
-    const next = nextIndexForKey(event, current < 0 ? checkedIndex : current, options.length);
-    if (next == null) return;
-    event.preventDefault();
-    refs.current[next]?.focus();
-    onChoose(options[next].value);
-  }
-  return (
-    <Box role="radiogroup" aria-label={label} onKeyDown={onKey} sx={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-      {options.map((option, index) => (
-        <Box
-          key={option.value}
-          ref={(node) => {
-            refs.current[index] = node;
-          }}
-          component="button"
-          type="button"
-          role="radio"
-          aria-checked={option.value === value}
-          tabIndex={index === (checkedIndex < 0 ? 0 : checkedIndex) ? 0 : -1}
-          onClick={() => onChoose(option.value)}
-          sx={pillSx}
-        >
-          {option.text}
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
-function Labeled({ label, children, htmlFor }) {
-  return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
-      <Box component="label" htmlFor={htmlFor} sx={{ color: COLORS.muted, fontSize: TYPE.meta, fontWeight: 600 }}>
-        {label}
-      </Box>
-      {children}
-    </Box>
-  );
-}
-
-const Tile = memo(function Tile({ icon, ms, sidc, standard, selected, onChoose, onPlace, onDragStart, dragTitle }) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-pressed={selected}
-      aria-label={icon.name}
-      title={`${icon.name} — ${dragTitle}`}
-      onClick={() => onChoose(icon)}
-      onDoubleClick={() => onPlace(icon)}
-      // A finger scrolls the grid; a mouse or a pen drags the symbol out.
-      onPointerDown={(event) => {
-        if (event.pointerType !== "touch") onDragStart(event, icon);
-      }}
-      sx={{
-        display: "grid",
-        placeItems: "center",
-        height: 50,
-        p: "3px",
-        border: `1px solid ${selected ? COLORS.selected : COLORS.rule}`,
-        borderRadius: `${RADIUS.control}px`,
-        bgcolor: selected ? COLORS.aSoft : COLORS.sheet,
-        boxShadow: selected ? `0 0 0 1px ${COLORS.selected}` : "none",
-        cursor: "grab",
-        "&:hover": { borderColor: COLORS.ink2 },
-        "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: 1 },
-        "& svg": { maxWidth: "100%", maxHeight: 42, width: "auto", height: "auto", pointerEvents: "none" },
-      }}
-    >
-      <Glyph ms={ms} sidc={sidc} standard={standard} size="small" />
-    </Box>
-  );
-});
-
-/**
- * Dragging a symbol out of the palette: past DRAG_START_PX the symbol, drawn
- * as it would be placed, follows the pointer, and a release over the map
- * places it there (palette.dropSymbol decides what counts as the map). Esc
- * or a release anywhere else drops nothing. The click that ends a drag is
- * swallowed, so the tile is not chosen again.
- */
-function useSymbolDrag(palette) {
-  const liveRef = useRef(palette);
-  liveRef.current = palette;
-  const cleanupRef = useRef(null);
-  useEffect(() => () => cleanupRef.current?.(), []);
-
-  return useCallback((event, icon) => {
-    if (event.button !== 0 || !icon) return;
-    cleanupRef.current?.();
-    const target = event.currentTarget;
-    const { pointerId } = event;
-    const start = { x: event.clientX, y: event.clientY };
-    const at = { ...start };
-    let ghost = null;
-    let anchor = { x: 0, y: 0 };
-    let frame = 0;
-
-    function show() {
-      const { ms, standard, draft } = liveRef.current;
-      if (!ms) return false;
-      let drawn;
-      try {
-        drawn = drawSymbol(ms, { sidc: composeSidc(icon, draft.settings, standard), standard: standard.id, texts: draft.texts, size: draft.size }, { onMap: true });
-      } catch {
-        return false;
-      }
-      ghost = document.createElement("div");
-      ghost.className = "map-symbol-ghost";
-      ghost.setAttribute("aria-hidden", "true");
-      Object.assign(ghost.style, { position: "fixed", left: "0", top: "0", zIndex: "2000", pointerEvents: "none", opacity: "0.9", lineHeight: "0", willChange: "transform" });
-      ghost.innerHTML = drawn.svg;
-      anchor = drawn.anchor;
-      document.body.append(ghost);
-      document.documentElement.style.cursor = "grabbing";
-      try {
-        target.setPointerCapture(pointerId);
-      } catch {
-        // The pointer may already be gone.
-      }
-      return true;
-    }
-    function place() {
-      frame = 0;
-      if (ghost) ghost.style.transform = `translate(${at.x - anchor.x}px, ${at.y - anchor.y}px)`;
-    }
-    function onMove(moveEvent) {
-      if (moveEvent.pointerId !== pointerId) return;
-      at.x = moveEvent.clientX;
-      at.y = moveEvent.clientY;
-      if (!ghost) {
-        const dx = at.x - start.x;
-        const dy = at.y - start.y;
-        if (dx * dx + dy * dy < DRAG_START_PX * DRAG_START_PX || !show()) return;
-      }
-      moveEvent.preventDefault();
-      if (!frame) frame = requestAnimationFrame(place);
-    }
-    function onEnd(endEvent) {
-      if (endEvent.pointerId !== pointerId) return;
-      const dragged = ghost != null;
-      cleanup();
-      if (!dragged) return;
-      swallowClick();
-      if (endEvent.type === "pointerup") liveRef.current.dropSymbol(icon, endEvent.clientX, endEvent.clientY);
-    }
-    function onKey(keyEvent) {
-      if (keyEvent.key !== "Escape" || !ghost) return;
-      keyEvent.preventDefault();
-      keyEvent.stopPropagation();
-      cleanup();
-      swallowClick();
-    }
-    function swallowClick() {
-      const stop = (clickEvent) => {
-        clickEvent.stopPropagation();
-        clickEvent.preventDefault();
-      };
-      window.addEventListener("click", stop, { capture: true, once: true });
-      window.setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
-    }
-    function cleanup() {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onEnd);
-      window.removeEventListener("pointercancel", onEnd);
-      window.removeEventListener("keydown", onKey, true);
-      if (frame) cancelAnimationFrame(frame);
-      frame = 0;
-      ghost?.remove();
-      ghost = null;
-      document.documentElement.style.cursor = "";
-      cleanupRef.current = null;
-    }
-    window.addEventListener("pointermove", onMove, { passive: false });
-    window.addEventListener("pointerup", onEnd);
-    window.addEventListener("pointercancel", onEnd);
-    window.addEventListener("keydown", onKey, true);
-    cleanupRef.current = cleanup;
-  }, []);
-}
 
 /**
  * @param {{
@@ -311,14 +33,11 @@ export default function SymbolPalette({ palette, open, onClose }) {
   const labels = useMemo(() => symbolLabels(text), [text]);
   const format = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US"), [language]);
   const panelRef = useRef(null);
+  const tabRefs = useRef([]);
   const [maxHeight, setMaxHeight] = useState(null);
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("");
-  const [limit, setLimit] = useState(PAGE);
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const { standard, catalog, ms, draft, icon, sidc, editing, placing } = palette;
-  const dragSymbol = useSymbolDrag(palette);
+  const { standard, ms, draft, icon, sidc, editing, placing } = palette;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const placingRef = useRef(placing);
@@ -361,29 +80,26 @@ export default function SymbolPalette({ palette, open, onClose }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // A new standard or search starts at the first page.
-  useEffect(() => setLimit(PAGE), [catalog.id, query, category]);
-  useEffect(() => setCategory(""), [catalog.id]);
   useEffect(() => {
     if (palette.count === 0) setConfirmClear(false);
   }, [palette.count]);
 
-  const categories = useMemo(() => symbolCategories(catalog.icons), [catalog.icons]);
-  const found = useMemo(() => searchSymbols(catalog.icons, query, { category: category || undefined, limit: Infinity }), [catalog.icons, query, category]);
-  const shown = found.slice(0, limit);
-  const tileSettings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, identity: draft.settings.identity, context: draft.settings.context }),
-    [draft.settings.identity, draft.settings.context],
-  );
-
   if (!open) return null;
 
-  const offers = icon ? symbolOffers(icon, standard) : null;
-  const modifierLists = offers?.modifiers ? (catalog.modifiers?.[icon.symbolSet] ?? {}) : {};
   const settings = draft.settings;
-  const change = palette.changeSettings;
-  const none = text.symbolNone;
+  const isFavorite = palette.favorites.includes(icon?.id);
+  const statusChoices = ["present", "planned"];
+  if (!statusChoices.includes(settings.status)) statusChoices.push(settings.status);
   const countText = text.symbolCount.replace("{count}", format.format(palette.count));
+
+  function onTabKey(event) {
+    const current = tabRefs.current.indexOf(event.target);
+    const next = nextIndexForKey(event, current < 0 ? GALLERY_TABS.indexOf(palette.tab) : current, GALLERY_TABS.length);
+    if (next == null) return;
+    event.preventDefault();
+    tabRefs.current[next]?.focus();
+    palette.chooseTab(GALLERY_TABS[next]);
+  }
 
   if (placing) {
     return (
@@ -407,20 +123,6 @@ export default function SymbolPalette({ palette, open, onClose }) {
     );
   }
 
-  const identity = (
-    <Box>
-      <Box component="h3" sx={sectionTitleSx}>
-        {text.symbolIdentity}
-      </Box>
-      <ChoicePills
-        label={text.symbolIdentity}
-        options={identityChoices(standard).map(({ value }) => ({ value, text: labels.identities[value] }))}
-        value={settings.identity}
-        onChoose={(value) => change({ identity: value })}
-      />
-    </Box>
-  );
-
   return (
     <Box
       ref={panelRef}
@@ -434,6 +136,21 @@ export default function SymbolPalette({ palette, open, onClose }) {
           {text.mapSymbols}
         </Box>
         <Box
+          component="select"
+          id="symbol-standard"
+          aria-label={text.symbolStandard}
+          value={standard.id}
+          disabled={editing}
+          onChange={(event) => palette.chooseStandard(event.target.value)}
+          sx={{ ...fieldSx, flex: "none", width: "auto", maxWidth: 150 }}
+        >
+          {SYMBOL_STANDARDS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </Box>
+        <Box
           component="button"
           type="button"
           aria-label={text.symbolClose}
@@ -445,269 +162,92 @@ export default function SymbolPalette({ palette, open, onClose }) {
         </Box>
       </Box>
 
+      {palette.tab !== "properties" && (
+        <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, p: "8px 12px 0", flex: "none" }}>
+          <Labeled label={text.symbolIdentity} htmlFor="symbol-quick-identity">
+            <Box component="select" id="symbol-quick-identity" value={settings.identity} onChange={(event) => palette.changeSettings({ identity: event.target.value })} sx={fieldSx}>
+              {identityChoices(standard).map(({ value }) => (
+                <option key={value} value={value}>
+                  {labels.identities[value]}
+                </option>
+              ))}
+            </Box>
+          </Labeled>
+          <Labeled label={text.symbolStatus} htmlFor="symbol-quick-status">
+            <Box component="select" id="symbol-quick-status" value={settings.status} onChange={(event) => palette.changeSettings({ status: event.target.value })} sx={fieldSx}>
+              {statusChoices.map((value) => (
+                <option key={value} value={value}>
+                  {labels.statuses[value]}
+                </option>
+              ))}
+            </Box>
+          </Labeled>
+        </Box>
+      )}
+
+      <Box
+        role="tablist"
+        aria-label={text.symbolTabs}
+        onKeyDown={onTabKey}
+        sx={{ display: "flex", gap: "2px", p: "8px 8px 0", flex: "none", borderBottom: `1px solid ${COLORS.rule}` }}
+      >
+        {GALLERY_TABS.map((id, index) => {
+          const selected = palette.tab === id;
+          return (
+            <Box
+              key={id}
+              ref={(node) => {
+                tabRefs.current[index] = node;
+              }}
+              component="button"
+              type="button"
+              role="tab"
+              id={`symbol-tab-${id}`}
+              aria-selected={selected}
+              aria-controls="symbol-tab-panel"
+              tabIndex={selected ? 0 : -1}
+              onClick={() => palette.chooseTab(id)}
+              title={id === "favorites" ? labels.tabs.favorites : undefined}
+              sx={{
+                flex: "1 1 auto",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "4px",
+                px: "6px",
+                minHeight: 34,
+                border: 0,
+                borderBottom: `2px solid ${selected ? COLORS.a : "transparent"}`,
+                bgcolor: "transparent",
+                color: selected ? COLORS.a : COLORS.muted,
+                font: "inherit",
+                fontSize: TYPE.meta,
+                fontWeight: 650,
+                whiteSpace: "nowrap",
+                cursor: "pointer",
+                "&:hover": { color: COLORS.ink },
+                "&:focus-visible": { outline: `2px solid ${COLORS.focus}`, outlineOffset: -2 },
+              }}
+            >
+              {id === "favorites" ? (
+                <>
+                  <Icon name="star" size={16} />
+                  <Box component="span" sx={visuallyHidden}>
+                    {labels.tabs.favorites}
+                  </Box>
+                </>
+              ) : (
+                labels.tabs[id]
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+
       <Box data-palette="body" sx={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain", scrollbarWidth: "thin", p: 1.5 }}>
-        <Labeled label={text.symbolStandard} htmlFor="symbol-standard">
-          <Box component="select" id="symbol-standard" value={standard.id} disabled={editing} onChange={(event) => palette.chooseStandard(event.target.value)} sx={fieldSx}>
-            {SYMBOL_STANDARDS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </Box>
-        </Labeled>
-        {editing && (
-          <Box component="p" sx={{ m: "6px 0 0", color: COLORS.muted, fontSize: TYPE.meta, lineHeight: 1.4 }}>
-            {text.symbolEditing}
-          </Box>
-        )}
-
-        {/* Preview: dragged onto the map, it is placed there. */}
-        <Box
-          data-palette="preview"
-          title={text.symbolDragTitle}
-          onPointerDown={(event) => dragSymbol(event, icon)}
-          sx={{
-            display: "flex",
-            gap: 1.25,
-            alignItems: "center",
-            mt: 1.5,
-            p: 1,
-            border: `1px solid ${COLORS.rule}`,
-            borderRadius: `${RADIUS.card}px`,
-            bgcolor: COLORS.paper,
-            cursor: icon && ms ? "grab" : "default",
-            touchAction: "none",
-            userSelect: "none",
-          }}
-        >
-          <Box sx={{ flex: "none", display: "grid", placeItems: "center", width: 96, minHeight: 72, overflow: "hidden", "& svg": { maxWidth: 96, height: "auto", pointerEvents: "none" } }}>
-            {ms && sidc ? <Glyph ms={ms} sidc={sidc} standard={standard.id} texts={draft.texts} size="medium" /> : <Spinner />}
-          </Box>
-          <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column", gap: "3px" }}>
-            <Box component="span" sx={{ fontSize: TYPE.small, fontWeight: 700, lineHeight: 1.3, overflowWrap: "anywhere" }}>
-              {icon?.name ?? "—"}
-            </Box>
-            {icon && icon.path.length > 1 && (
-              <Box component="span" sx={{ color: COLORS.muted, fontSize: TYPE.label, lineHeight: 1.35, overflowWrap: "anywhere" }}>
-                {icon.path.slice(0, -1).join(" › ")}
-              </Box>
-            )}
-            {sidc && (
-              <Box component="code" sx={{ color: COLORS.ink2, fontFamily: MONO_FONT, fontSize: TYPE.label, letterSpacing: "0.02em", overflowWrap: "anywhere" }}>
-                {sidc}
-              </Box>
-            )}
-          </Box>
+        <Box role="tabpanel" id="symbol-tab-panel" aria-labelledby={`symbol-tab-${palette.tab}`}>
+          {palette.tab === "properties" ? <SymbolEditor palette={palette} labels={labels} /> : <SymbolGallery palette={palette} labels={labels} tab={palette.tab} />}
         </Box>
-
-        {offers && <Box sx={{ mt: 1.5 }}>{identity}</Box>}
-
-        {/* Catalogue */}
-        <Box sx={{ mt: 1.5 }}>
-          {catalog.status === "error" || palette.msFailed ? (
-            <Box role="alert" sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderRadius: `${RADIUS.control}px`, bgcolor: COLORS.warnSoft, color: COLORS.warn, fontSize: TYPE.small, fontWeight: 600 }}>
-              <Icon name="alert" size={16} />
-              <Box component="span" sx={{ flex: 1 }}>
-                {palette.msFailed ? text.symbolRendererFailed : text.symbolLoadFailed}
-              </Box>
-              <Box component="button" type="button" onClick={palette.retry} sx={{ ...actionSx, color: COLORS.warn, borderColor: "currentColor" }}>
-                {text.mapRetry}
-              </Box>
-            </Box>
-          ) : catalog.status !== "ready" ? (
-            <Box role="status" sx={{ display: "flex", alignItems: "center", gap: 1, color: COLORS.muted, fontSize: TYPE.small }}>
-              <Spinner />
-              {text.symbolLoading}
-            </Box>
-          ) : (
-            <>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
-                <Box
-                  component="input"
-                  type="search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={text.symbolSearch}
-                  aria-label={text.symbolSearch}
-                  sx={fieldSx}
-                />
-                <Box component="select" value={category} onChange={(event) => setCategory(event.target.value)} aria-label={text.symbolCategory} sx={fieldSx}>
-                  <option value="">{text.symbolCategoryAll.replace("{count}", format.format(catalog.icons.length))}</option>
-                  {categories.map((entry) => (
-                    <option key={entry.category} value={entry.category}>
-                      {`${entry.category} (${format.format(entry.count)})`}
-                    </option>
-                  ))}
-                </Box>
-              </Box>
-              <Box component="p" role="status" sx={{ m: "8px 0 6px", color: COLORS.muted, fontSize: TYPE.meta }}>
-                {found.length === 0 ? text.symbolNoResults : text.symbolResults.replace("{count}", format.format(found.length))}
-              </Box>
-              <Box
-                role="group"
-                aria-label={text.symbolCatalogue}
-                sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(54px, 1fr))", gap: "6px", maxHeight: 232, overflowY: "auto", overscrollBehavior: "contain", p: "2px" }}
-              >
-                {shown.map((entry) => (
-                  <Tile
-                    key={entry.id}
-                    icon={entry}
-                    ms={ms}
-                    sidc={composeSidc(entry, tileSettings, standard)}
-                    standard={standard.id}
-                    selected={entry.id === draft.iconId}
-                    onChoose={palette.chooseIcon}
-                    onPlace={palette.placeWith}
-                    onDragStart={dragSymbol}
-                    dragTitle={text.symbolDragTitle}
-                  />
-                ))}
-                {found.length > shown.length && (
-                  <Box component="button" type="button" onClick={() => setLimit((value) => value + PAGE)} sx={{ ...actionSx, gridColumn: "1 / -1", justifyContent: "center" }}>
-                    {text.symbolShowMore}
-                  </Box>
-                )}
-              </Box>
-            </>
-          )}
-        </Box>
-
-        {/* Amplifiers */}
-        {offers && (
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, mt: 2 }}>
-            {offers.contexts.length > 1 && (
-              <Box>
-                <Box component="h3" sx={sectionTitleSx}>
-                  {text.symbolContext}
-                </Box>
-                <Segmented
-                  label={text.symbolContext}
-                  size="sm"
-                  options={offers.contexts.map((value) => ({ value, label: labels.contexts[value] }))}
-                  value={offers.contexts.includes(settings.context) ? settings.context : "0"}
-                  onChange={(context) => change({ context })}
-                />
-              </Box>
-            )}
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
-              <Labeled label={text.symbolStatus} htmlFor="symbol-status">
-                <Box component="select" id="symbol-status" value={offers.statuses.includes(settings.status) ? settings.status : "present"} onChange={(event) => change({ status: event.target.value })} sx={fieldSx}>
-                  {STATUSES.filter(({ value }) => offers.statuses.includes(value)).map(({ value }) => (
-                    <option key={value} value={value}>
-                      {labels.statuses[value]}
-                    </option>
-                  ))}
-                </Box>
-              </Labeled>
-              {offers.echelon && (
-                <Labeled label={text.symbolEchelon} htmlFor="symbol-echelon">
-                  <Box component="select" id="symbol-echelon" value={settings.echelon} onChange={(event) => change({ echelon: event.target.value })} sx={fieldSx}>
-                    <option value="">{none}</option>
-                    {ECHELONS.map(([value]) => (
-                      <option key={value} value={value}>
-                        {labels.echelons[value]}
-                      </option>
-                    ))}
-                  </Box>
-                </Labeled>
-              )}
-              {offers.mobility && (
-                <Labeled label={text.symbolMobility} htmlFor="symbol-mobility">
-                  <Box component="select" id="symbol-mobility" value={settings.mobility} onChange={(event) => change({ mobility: event.target.value })} sx={fieldSx}>
-                    <option value="">{none}</option>
-                    {MOBILITIES.map(([value]) => (
-                      <option key={value} value={value}>
-                        {labels.mobilities[value]}
-                      </option>
-                    ))}
-                  </Box>
-                </Labeled>
-              )}
-            </Box>
-            {(offers.hq || offers.taskForce || offers.feintDummy) && (
-              <Box>
-                <Box component="h3" sx={sectionTitleSx}>
-                  {text.symbolIndicators}
-                </Box>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                  {offers.hq && (
-                    <Box component="button" type="button" aria-pressed={settings.hq} onClick={() => change({ hq: !settings.hq })} sx={pillSx}>
-                      {text.symbolHq}
-                    </Box>
-                  )}
-                  {offers.taskForce && (
-                    <Box component="button" type="button" aria-pressed={settings.taskForce} onClick={() => change({ taskForce: !settings.taskForce })} sx={pillSx}>
-                      {text.symbolTaskForce}
-                    </Box>
-                  )}
-                  {offers.feintDummy && (
-                    <Box component="button" type="button" aria-pressed={settings.feintDummy} onClick={() => change({ feintDummy: !settings.feintDummy })} sx={pillSx}>
-                      {text.symbolFeintDummy}
-                    </Box>
-                  )}
-                </Box>
-              </Box>
-            )}
-            {(modifierLists["1"]?.length > 0 || modifierLists["2"]?.length > 0) && (
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr", gap: 1 }}>
-                {modifierLists["1"]?.length > 0 && (
-                  <Labeled label={text.symbolModifier1} htmlFor="symbol-modifier-1">
-                    <Box component="select" id="symbol-modifier-1" value={settings.modifier1} onChange={(event) => change({ modifier1: event.target.value })} sx={fieldSx}>
-                      <option value="00">{none}</option>
-                      {modifierLists["1"].map(([code, name]) => (
-                        <option key={code} value={code}>
-                          {name}
-                        </option>
-                      ))}
-                    </Box>
-                  </Labeled>
-                )}
-                {modifierLists["2"]?.length > 0 && (
-                  <Labeled label={text.symbolModifier2} htmlFor="symbol-modifier-2">
-                    <Box component="select" id="symbol-modifier-2" value={settings.modifier2} onChange={(event) => change({ modifier2: event.target.value })} sx={fieldSx}>
-                      <option value="00">{none}</option>
-                      {modifierLists["2"].map(([code, name]) => (
-                        <option key={code} value={code}>
-                          {name}
-                        </option>
-                      ))}
-                    </Box>
-                  </Labeled>
-                )}
-              </Box>
-            )}
-            <Box>
-              <Box component="h3" sx={sectionTitleSx}>
-                {text.symbolSize}
-              </Box>
-              <Segmented
-                label={text.symbolSize}
-                size="sm"
-                options={["small", "medium", "large"].map((value) => ({ value, label: labels.sizes[value] }))}
-                value={draft.size}
-                onChange={palette.chooseSize}
-              />
-            </Box>
-            <Disclosure title={text.symbolTexts} defaultOpen={Object.keys(draft.texts).length > 0}>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, [PHONE]: { gridTemplateColumns: "1fr" } }}>
-                {TEXT_FIELDS.map(({ key, code }) => (
-                  <Labeled key={key} label={`${labels.fields[key]} (${code})`} htmlFor={`symbol-text-${key}`}>
-                    <Box
-                      component="input"
-                      id={`symbol-text-${key}`}
-                      type="text"
-                      inputMode={key === "direction" ? "decimal" : undefined}
-                      maxLength={TEXT_MAX}
-                      value={draft.texts[key] ?? ""}
-                      onChange={(event) => palette.changeText(key, event.target.value)}
-                      sx={fieldSx}
-                    />
-                  </Labeled>
-                ))}
-              </Box>
-            </Disclosure>
-          </Box>
-        )}
 
         <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1, mt: 2, pt: 1.25, borderTop: `1px solid ${COLORS.rule}`, color: COLORS.muted, fontSize: TYPE.meta }}>
           {confirmClear ? (
@@ -752,6 +292,46 @@ export default function SymbolPalette({ palette, open, onClose }) {
 
       {/* Actions: always in view, whatever the body's scroll. */}
       <Box data-palette="actions" sx={{ flex: "none", p: "10px 12px 12px", borderTop: `1px solid ${COLORS.rule}`, bgcolor: COLORS.paper }}>
+        {icon && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: "8px" }}>
+            <Box sx={{ flex: "none", display: "grid", placeItems: "center", width: 44, height: 36, "& svg": { maxWidth: 44, maxHeight: 36, width: "auto", height: "auto" } }}>
+              <Glyph ms={ms} sidc={sidc} standard={standard.id} texts={draft.texts} size="small" />
+            </Box>
+            <Box sx={{ flex: "1 1 auto", minWidth: 0, display: "flex", flexDirection: "column", gap: "1px" }}>
+              <Box component="span" sx={{ fontSize: TYPE.small, fontWeight: 700, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {icon.name}
+              </Box>
+              <Box component="code" sx={{ color: COLORS.muted, fontFamily: MONO_FONT, fontSize: TYPE.label, lineHeight: 1.3 }}>
+                {symbolCode(icon)}
+              </Box>
+            </Box>
+            <Box
+              component="button"
+              type="button"
+              aria-pressed={isFavorite}
+              aria-label={isFavorite ? text.symbolFavoriteRemove : text.symbolFavoriteAdd}
+              title={isFavorite ? text.symbolFavoriteRemove : text.symbolFavoriteAdd}
+              onClick={() => palette.toggleFavorite(icon.id)}
+              sx={{
+                flex: "none",
+                display: "grid",
+                placeItems: "center",
+                width: 34,
+                height: 34,
+                border: 0,
+                borderRadius: `${RADIUS.control}px`,
+                bgcolor: "transparent",
+                color: isFavorite ? COLORS.a : COLORS.muted,
+                cursor: "pointer",
+                "& svg": { fill: "currentColor" },
+                "&:hover": { bgcolor: COLORS.paper2, color: COLORS.a },
+                "&:focus-visible": { outline: `2px solid ${COLORS.focus}` },
+              }}
+            >
+              <Icon name="star" size={18} />
+            </Box>
+          </Box>
+        )}
         {/* One row: the place button takes the room the edit buttons leave. */}
         <Box sx={{ display: "flex", gap: 0.75, "& > button": { px: "11px", whiteSpace: "nowrap" } }}>
           <Box component="button" type="button" onClick={palette.startPlacing} disabled={!icon || !sidc || !ms} sx={{ ...primarySx, flex: "1 1 auto", justifyContent: "center", minWidth: 0 }}>
@@ -774,42 +354,5 @@ export default function SymbolPalette({ palette, open, onClose }) {
         </Box>
       </Box>
     </Box>
-  );
-}
-
-
-const panelSx = {
-  width: 336,
-  maxWidth: "calc(100vw - 32px)",
-  overflowY: "auto",
-  overscrollBehavior: "contain",
-  boxSizing: "border-box",
-  p: 1.5,
-  border: `1px solid ${COLORS.rule2}`,
-  borderRadius: `${RADIUS.card}px`,
-  bgcolor: COLORS.glass,
-  boxShadow: SHADOW.float,
-  color: COLORS.ink,
-  fontFamily: UI_FONT,
-  [PHONE]: { maxWidth: "calc(100vw - 82px)" },
-};
-
-function Spinner() {
-  return (
-    <Box
-      component="span"
-      aria-hidden="true"
-      sx={{
-        flex: "none",
-        width: 16,
-        height: 16,
-        border: `2px solid ${COLORS.rule2}`,
-        borderTopColor: COLORS.ink2,
-        borderRadius: "50%",
-        animation: "convertSymbolSpin 800ms linear infinite",
-        "@keyframes convertSymbolSpin": { to: { transform: "rotate(360deg)" } },
-        "@media (prefers-reduced-motion: reduce)": { animation: "none" },
-      }}
-    />
   );
 }
