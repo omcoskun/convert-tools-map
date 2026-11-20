@@ -115,6 +115,7 @@ test("production pages carry the Content-Security-Policy meta tag, development p
     "https://api.maptiler.com",
     "https://elevation-tiles-prod.s3.amazonaws.com",
     "https://gibs.earthdata.nasa.gov",
+    "https://nominatim.openstreetmap.org",
     "https://tiles.maps.eox.at",
     "https://tiles.openfreemap.org",
   ]);
@@ -190,3 +191,10 @@ test("the map origins include the terrain tiles' origin but no credit link", () 
   assert.deepEqual(mapOrigins({ basemaps: map.basemaps }), ["https://style.example"]);
 });
 
+test("the map origins include the place search's origin but not its credit link", () => {
+  const map = {
+    basemaps: [{ id: "a", style: "https://style.example/a.json" }],
+    search: { url: "https://search.example/search", limit: 8, attribution: [{ text: "S", href: "https://credit.example/s" }] },
+  };
+  assert.deepEqual(mapOrigins(map), ["https://search.example", "https://style.example"]);
+});

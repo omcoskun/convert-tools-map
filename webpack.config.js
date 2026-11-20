@@ -84,7 +84,7 @@ function urlsIn(value) {
 /**
  * Origins the map fetches from: those of every basemap style and raster
  * tile template in public/config.json (map.basemaps), of the elevation
- * tiles (map.terrain). A
+ * tiles (map.terrain), and of the place search (map.search). A
  * style's tiles, glyphs and sprites come from its own origin. Attribution
  * links are not fetched and are left out.
  */
@@ -92,6 +92,7 @@ export function mapOrigins(map) {
   const fetched = [
     ...(map?.basemaps ?? []),
     ...(map?.terrain ? [map.terrain] : []),
+    ...(map?.search ? [map.search] : []),
   ];
   return [...new Set(urlsIn(fetched).map((url) => new URL(url.replace(/[{}]/g, "")).origin))].sort();
 }

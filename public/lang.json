@@ -488,7 +488,18 @@
       "importImageUnreadable": "görüntü açılamadı",
       "importFeaturePoint": "Nokta",
       "importFeatureLine": "Çizgi",
-      "importFeatureArea": "Alan"
+      "importFeatureArea": "Alan",
+      "mapSearch": "Yer ara",
+      "searchLabel": "Yer adı, adres veya koordinat",
+      "searchPlaceholder": "Ör. Kızılay, Ankara ya da 39.93, 32.86",
+      "searchSubmit": "Ara",
+      "searchClear": "Aramayı temizle",
+      "searchClose": "Aramayı kapat",
+      "searchLoading": "Aranıyor…",
+      "searchNoResults": "Sonuç bulunamadı.",
+      "searchFailed": "Arama yapılamadı. Bağlantınızı denetleyip yeniden deneyin.",
+      "searchResults": "{count} sonuç",
+      "searchCredit": "Arama: Nominatim"
     },
     "units": {
       "millimetre": "Milimetre",
@@ -1036,7 +1047,18 @@
       "importImageUnreadable": "the image could not be opened",
       "importFeaturePoint": "Point",
       "importFeatureLine": "Line",
-      "importFeatureArea": "Area"
+      "importFeatureArea": "Area",
+      "mapSearch": "Search for a place",
+      "searchLabel": "Place name, address or coordinates",
+      "searchPlaceholder": "E.g. Kızılay, Ankara or 39.93, 32.86",
+      "searchSubmit": "Search",
+      "searchClear": "Clear the search",
+      "searchClose": "Close the search",
+      "searchLoading": "Searching…",
+      "searchNoResults": "No places found.",
+      "searchFailed": "The search failed. Check your connection and try again.",
+      "searchResults": "{count} results",
+      "searchCredit": "Search: Nominatim"
     },
     "units": {
       "millimetre": "Millimetre",

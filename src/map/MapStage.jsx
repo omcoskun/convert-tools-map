@@ -13,6 +13,7 @@ import ContextMenu from "./ContextMenu.jsx";
 import ImportPanel from "./ImportPanel.jsx";
 import LayerPanel from "./LayerPanel.jsx";
 import { PIN_SHAPE } from "./map-adapter.js";
+import PlaceSearch from "./PlaceSearch.jsx";
 import { SCALE_UNITS } from "./scale.js";
 import ScaleBar from "./ScaleBar.jsx";
 import SpaceBackdrop from "./SpaceBackdrop.jsx";
@@ -420,6 +421,10 @@ export default function MapStage({
 
   const [layersOpen, setLayersOpen] = useState(false);
   const layersButtonRef = useRef(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchButtonRef = useRef(null);
+  const pinRef = useRef(null);
+  const [pinned, setPinned] = useState(false);
   const symbolsButtonRef = useRef(null);
   const markerLabel = useCallback(
     (symbol) => {
@@ -500,6 +505,41 @@ export default function MapStage({
     if (focused instanceof Element && focused.closest(".map-layer-panel")) layersButtonRef.current?.focus();
     setLayersOpen(false);
   }, []);
+  const closeSearch = useCallback(() => {
+    const focused = document.activeElement;
+    if (focused instanceof Element && focused.closest(".map-place-search")) searchButtonRef.current?.focus();
+    setSearchOpen(false);
+  }, []);
+  // A chosen place gets a plain MapLibre pin on its point and the map frames
+  // its bounds (or just its point); a phone closes the search so the map shows.
+  const choosePlace = useCallback(
+    (place) => {
+      const instance = map.getMap();
+      const library = map.getLibrary();
+      if (!instance || !library) return;
+      pinRef.current?.remove();
+      pinRef.current = new library.Marker().setLngLat([place.lng, place.lat]).addTo(instance);
+      const element = pinRef.current.getElement();
+      if (element) element.title = place.name;
+      setPinned(true);
+      map.fitArea(place.bounds ?? [[place.lng, place.lat], [place.lng, place.lat]], { maxZoom: 16 });
+      if (window.matchMedia(PHONE.replace(/^@media\s*/, "")).matches) closeSearch();
+    },
+    [map.getMap, map.getLibrary, map.fitArea, closeSearch],
+  );
+  const clearPlace = useCallback(() => {
+    pinRef.current?.remove();
+    pinRef.current = null;
+    setPinned(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      pinRef.current?.remove();
+      pinRef.current = null;
+    },
+    [],
+  );
 
   useEffect(() => {
     onStatusChange(status);
@@ -543,7 +583,7 @@ export default function MapStage({
   useEffect(() => {
     if (!active) return undefined;
     function onKey(event) {
-      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || symbols.open || imports.open || map.contextMenu) return;
+      if (event.key !== "Escape" || event.defaultPrevented || layersOpen || searchOpen || symbols.open || imports.open || map.contextMenu) return;
       if (picking) {
         handlersRef.current?.onCancelPick?.();
         event.preventDefault();
@@ -554,7 +594,7 @@ export default function MapStage({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, symbols.open, imports.open, map.contextMenu]);
+  }, [active, picking, expanded, onToggleExpanded, handlersRef, layersOpen, searchOpen, symbols.open, imports.open, map.contextMenu]);
 
   const tone = TONES[picking?.tone] ?? TONES.ink;
   const toneColors = TONE_COLORS[loaded.tone] ?? TONE_COLORS.light;
@@ -860,11 +900,27 @@ export default function MapStage({
       >
         <Box sx={groupSx}>
           <ControlButton
+            label={text.mapSearch}
+            icon="search"
+            buttonRef={searchButtonRef}
+            expanded={searchOpen}
+            onClick={() => {
+              setLayersOpen(false);
+              setSearchOpen((value) => !value);
+            }}
+            disabled={!ready}
+          />
+        </Box>
+        <Box sx={groupSx}>
+          <ControlButton
             label={text.mapLayers}
             icon="layers"
             buttonRef={layersButtonRef}
             expanded={layersOpen}
-            onClick={() => setLayersOpen((open) => !open)}
+            onClick={() => {
+              setSearchOpen(false);
+              setLayersOpen((open) => !open);
+            }}
             disabled={!ready}
           />
           <ControlButton label={text.map3D} onClick={() => setMode(viewMode === "3d" ? "2d" : "3d")} disabled={!ready} pressed={viewMode === "3d"}>
@@ -924,6 +980,14 @@ export default function MapStage({
           [PHONE]: { top: top(expanded, 10), right: 66 },
         }}
       >
+        <PlaceSearch
+          open={searchOpen && ready}
+          onClose={closeSearch}
+          returnFocusRef={searchButtonRef}
+          onChoose={choosePlace}
+          onClear={clearPlace}
+          pinned={pinned}
+        />
         <LayerPanel
           open={layersOpen && ready}
           onClose={closeLayers}

@@ -131,7 +131,7 @@ test("the comparison sphere has a plausible Earth radius in metres", () => {
 });
 
 test("the basemaps are https styles with structured attributions; the satellite is EOX 2025 imagery with a night side", () => {
-  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap", "terrain"]);
+  assert.deepEqual(Object.keys(config.map).sort(), ["basemaps", "defaultBasemap", "search", "terrain"]);
   const ids = config.map.basemaps.map((basemap) => basemap.id);
   assert.deepEqual(ids, ["standard", "detailed", "satellite"]);
   assert.ok(ids.includes(config.map.defaultBasemap));
@@ -235,3 +235,10 @@ test("the terrain is the free Terrarium elevation tiles from their own bucket, w
   assert.ok(credit.text.length <= 50, credit.text);
 });
 
+test("the place search is OpenStreetMap's Nominatim: no key, a request a second at most, with its credit", () => {
+  const { search } = config.map;
+  assert.equal(search.url, "https://nominatim.openstreetmap.org/search");
+  assert.equal(search.limit, 8);
+  assert.ok(search.minIntervalMs >= 1000, "Nominatim's usage policy: at most one request per second");
+  assert.deepEqual(search.attribution, [{ text: "© OpenStreetMap", href: "https://www.openstreetmap.org/copyright" }]);
+});

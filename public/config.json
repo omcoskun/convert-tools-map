@@ -102,6 +102,12 @@
   },
   "map": {
     "defaultBasemap": "standard",
+    "search": {
+      "url": "https://nominatim.openstreetmap.org/search",
+      "limit": 8,
+      "minIntervalMs": 1000,
+      "attribution": [{ "text": "© OpenStreetMap", "href": "https://www.openstreetmap.org/copyright" }]
+    },
     "basemaps": [
       {
         "id": "standard",
